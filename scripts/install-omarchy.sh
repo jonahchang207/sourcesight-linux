@@ -6,7 +6,7 @@ build_dir="${repo_dir}/build"
 config_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/hypr"
 rules_file="${config_dir}/sourcesight.conf"
 
-sudo pacman -S --needed --noconfirm base-devel cmake curl glfw-x11 libx11 mesa
+sudo pacman -S --needed --noconfirm base-devel cmake curl glfw-x11 libx11 libxrandr mesa
 cmake -S "${repo_dir}" -B "${build_dir}" -DCMAKE_BUILD_TYPE=Release
 cmake --build "${build_dir}" --parallel
 

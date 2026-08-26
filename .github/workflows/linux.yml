@@ -11,7 +11,7 @@ jobs:
     container: archlinux:base-devel
     steps:
       - name: Install build tools
-        run: pacman -Syu --noconfirm git cmake curl glfw-x11 libx11 mesa
+        run: pacman -Syu --noconfirm git cmake curl glfw-x11 libx11 libxrandr mesa
       - uses: actions/checkout@v4
         with:
           submodules: recursive
