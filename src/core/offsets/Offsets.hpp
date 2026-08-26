@@ -31,9 +31,6 @@ namespace offsets
 		constexpr std::ptrdiff_t m_vecAbsVelocity = 0x568; // Vector
 
 		constexpr std::ptrdiff_t m_pGameSceneNode = 0x4A0; // CGameSceneNode*
-		// The July a2x Linux dump lists 0x41D0; this build's C_CSPlayerPawn
-		// subclass region is shifted +0x10. Verified against the live game by
-		// correlating the facing direction with each player's velocity.
 		constexpr std::ptrdiff_t m_angEyeAngles = 0x41E0; // QAngle (pitch, yaw, roll) - C_CSPlayerPawn
 		
 		constexpr std::ptrdiff_t m_entitySpottedState = 0x2AE8; // EntitySpottedState_t
@@ -43,12 +40,20 @@ namespace offsets
 		
 		constexpr std::ptrdiff_t m_pWeaponServices = 0x1190; // CPlayer_WeaponServices*
 		constexpr std::ptrdiff_t m_hActiveWeapon = 0x60; // CHandle<C_BasePlayerWeapon> - CPlayer_WeaponServices
-		constexpr std::ptrdiff_t m_AttributeManager = 0x1130; // C_AttributeContainer - C_EconEntity (parent of C_BasePlayerWeapon)
+		constexpr std::ptrdiff_t m_AttributeManager = 0x1130; // C_AttributeContainer - C_EconEntity
 		constexpr std::ptrdiff_t m_Item = 0x50; // C_EconItemView - C_AttributeContainer
 		constexpr std::ptrdiff_t m_iItemDefinitionIndex = 0x10C2; // uint16 - C_EconItemView
 		constexpr std::ptrdiff_t m_iClip1 = 0x2590; // int32 - C_BasePlayerWeapon
 		constexpr std::ptrdiff_t m_bInReload = 0x26A4; // bool - C_CSWeaponBase
 		constexpr std::ptrdiff_t m_pObserverServices = 0x11A8; // CPlayer_ObserverServices*
+
+		// Skin changer netvars (C_BasePlayerWeapon / C_EconEntity fallback fields)
+		constexpr std::ptrdiff_t m_nFallbackPaintKit = 0x31D8; // int32 - paint kit index
+		constexpr std::ptrdiff_t m_flFallbackWear = 0x31DC; // float - wear (0=FN, 1=BS)
+		constexpr std::ptrdiff_t m_nFallbackSeed = 0x31E0; // int32 - pattern seed
+		constexpr std::ptrdiff_t m_nFallbackStatTrak = 0x31E4; // int32 - stattrak kills (-1 = none)
+		constexpr std::ptrdiff_t m_iItemIDHigh = 0x2FC0; // int32 - force fallback values
+		constexpr std::ptrdiff_t m_OriginalOwnerXuidLow = 0x31F4; // int32 - ownership bypass
 	}
 
 	namespace bomb {

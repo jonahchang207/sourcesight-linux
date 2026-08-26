@@ -2,6 +2,8 @@
 
 #include "core/engine/cache/Cache.hpp"
 #include "core/input/MouseAim.hpp"
+#include "core/engine/classes/SkinChanger.hpp"
+#include "core/engine/classes/SkinDatabase.hpp"
 #include "gui/renderer/Renderer.hpp" // Circular dependency
 #include "gui/renderer/window/Window.hpp" // Circular dependency
 #include "assets/fonts/Icons.h"
@@ -429,6 +431,93 @@ void Menu::RenderImpl() {
 					ImGui::TextWrapped(
 						"F9: panic key (disables all). MB5: toggle aim."
 					);
+				}
+				else if (active_tab == Tab::SKINS)
+				{
+					ImGui::Text("Skin Changer");
+					ImGui::Separator();
+					ImGui::TextWrapped("Select a weapon and skin to apply. Visual only — other players see default skins.");
+					ImGui::Spacing();
+
+					static int selected_weapon = WEAPON_AK47;
+					static int selected_skin = 0;
+					static float selected_wear = 0.0f;
+					static int selected_seed = 0;
+					static int selected_stattrak = -1;
+					static bool stattrak_on = false;
+
+					// Weapon selector
+					const auto& weapons = SkinDB::Weapons();
+					if (ImGui::BeginCombo("Weapon", SkinDB::Weapons().count(selected_weapon)
+						? SkinDB::Weapons().at(selected_weapon).display_name : "AK-47")) {
+						for (const auto& [id, info] : weapons) {
+							bool is_selected = (selected_weapon == id);
+							if (ImGui::Selectable(info.display_name, is_selected))
+								selected_weapon = id;
+							if (is_selected)
+								ImGui::SetItemDefaultFocus();
+						}
+						ImGui::EndCombo();
+					}
+
+					// Skin selector
+					const auto& skins = SkinDB::PopularSkins();
+					if (ImGui::BeginCombo("Skin", skins[selected_skin].name)) {
+						for (int i = 0; i < static_cast<int>(skins.size()); ++i) {
+							bool is_selected = (selected_skin == i);
+							if (ImGui::Selectable(skins[i].name, is_selected))
+								selected_skin = i;
+							if (is_selected)
+								ImGui::SetItemDefaultFocus();
+						}
+						ImGui::EndCombo();
+					}
+
+					// Wear
+					ImGui::SliderFloat("Wear", &selected_wear, 0.0f, 1.0f, "%.2f");
+					ImGui::SameLine();
+					ImGui::TextColored(ImVec4(0.7f, 0.8f, 0.9f, 1.0f), "%s", SkinDB::WearName(selected_wear));
+
+					// Seed
+					ImGui::SliderInt("Seed", &selected_seed, 0, 1000);
+
+					// StatTrak
+					ImGui::Checkbox("StatTrak", &stattrak_on);
+					if (stattrak_on) {
+						if (selected_stattrak < 0) selected_stattrak = 0;
+						ImGui::SliderInt("Kills", &selected_stattrak, 0, 999999);
+					} else {
+						selected_stattrak = -1;
+					}
+
+					ImGui::Spacing();
+
+					// Apply button
+					if (ImGui::Button("Apply Skin", ImVec2(-1, 30))) {
+						auto& skin = SkinChanger::Get(selected_weapon);
+						skin.paint_kit = skins[selected_skin].paint_kit;
+						skin.wear = selected_wear;
+						skin.seed = selected_seed;
+						skin.stattrak = selected_stattrak;
+					}
+
+					// Reset button
+					if (ImGui::Button("Reset to Default", ImVec2(-1, 24))) {
+						SkinChanger::Get(selected_weapon) = SkinOverride{};
+					}
+
+					// Active skins list
+					const auto& active = SkinChanger::GetAll();
+					if (!active.empty()) {
+						ImGui::Spacing();
+						ImGui::Text("Active Skins");
+						ImGui::Separator();
+						for (const auto& [id, skin] : active) {
+							const auto& wname = SkinDB::Weapons().count(id)
+								? SkinDB::Weapons().at(id).display_name : "Unknown";
+							ImGui::Text("%s: kit %d, wear %.2f", wname, skin.paint_kit, skin.wear);
+						}
+					}
 				}
 				else if (active_tab == Tab::MACRO)
 				{

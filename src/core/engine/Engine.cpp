@@ -3,6 +3,7 @@
 #include "core/offsets/Dumper.hpp"
 #include "core/engine/cache/Cache.hpp"
 #include "core/engine/classes/Macro.hpp"
+#include "core/engine/classes/SkinChanger.hpp"
 #include "core/input/MouseAim.hpp"
 
 bool Engine::Init() {
@@ -54,13 +55,12 @@ bool Engine::InitImpl() {
 }
 
 void Engine::Thread() {
-    // TODO: Check build number 
-    // uintptr_t number = process->read<uintptr_t>(base_engine.base + offsets::buildNumber);
-
     while (true) {
-        auto start = steady_clock::now();		Cache::Refresh();
+        auto start = steady_clock::now();
+        Cache::Refresh();
 		Macro::Update();
 		MouseAim::Update();
+		SkinChanger::Run();
 
 		if (cfg::settings::free_cpu)
             std::this_thread::sleep_until(start + 1ms);
