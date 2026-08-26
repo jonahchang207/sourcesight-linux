@@ -2,7 +2,7 @@
 SETLOCAL EnableDelayedExpansion
 
 set CC=zig c++
-set BINARY=cs2-external-esp.exe
+set BINARY=sourcesight.exe
 set TARGET=x86_64-windows-gnu
 
 set OUTDIR=x64\%TARGET%

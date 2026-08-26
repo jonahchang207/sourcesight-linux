@@ -25,10 +25,11 @@ bool Cache::RefreshImpl() {
     if (!p)
         return false;
 
+    std::lock_guard<std::mutex> lock(mtx);
     auto now = steady_clock::now();
 
     // Without this, we are pointless :c
-    // Its just calling game.UpdateMatrix() which has to bee updated as fast as possible
+    // This calls game.UpdateMatrix(), which must be updated as fast as possible.
     if (!game.Update())
         return false;
 
@@ -57,24 +58,20 @@ bool Cache::RefreshImpl() {
         if (player.localplayer)
             this->local = player;
 
-        player.has_c4 = (bomb.carrier != 0 && (uintptr_t)player.pawn_controller_addr == bomb.carrier);
+        player.has_c4 = bomb.carrier != 0 && player.pawn_controller_addr == bomb.carrier;
 
         // TODO: Handle or at least alert, in case of multiple lp
         //if (player.localplayer && (this->local.index == -1 || this->local.index == player.index))
         //    this->local = player;
         //else if (player.localplayer)
-        //    LOGF(FATAL, "Offset missmatch, initial({}) current({}) there are more than one local players, update needed", this->local.index, player.index);
+        //    LOGF(FATAL, "Offset mismatch, initial({}) current({}); there is more than one local player, update needed", this->local.index, player.index);
     
         scan.push_back(player);
     }
 
-    {
-        std::lock_guard<std::mutex> lock(mtx);
-        players = std::move(scan);
-
-        duration = duration_cast<std::chrono::milliseconds>(last - now);
-        last = now;
-    }
+    players = std::move(scan);
+    duration = duration_cast<std::chrono::milliseconds>(steady_clock::now() - now);
+    last = now;
 
     return true;
 }

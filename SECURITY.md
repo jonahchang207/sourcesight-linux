@@ -6,7 +6,7 @@ Only the latest release version is supported for security detections.
 
 ## Reporting a Vulnerability
 
-If you believe you’ve found a security vulnerability in this "mod", please report it to: `security <at> noob.pm`.
+If you believe you’ve found a security vulnerability in this "mod", please report it to: [private vulnerability reporting](https://github.com/jonahchang207/sourcesight-linux/security/advisories/new).
 
 What to include in your report:
 
@@ -18,7 +18,7 @@ What to include in your report:
 
 ## Reporting Detections (Ban Triggers / False Positives)
 
-If the "mod" is suspected of triggering game bans, false positives, or other enforcement actions, please report it to: `security <at> noob.pm`.
+If the "mod" is suspected of triggering game bans, false positives, or other enforcement actions, please report it to: [private vulnerability reporting](https://github.com/jonahchang207/sourcesight-linux/security/advisories/new).
 
 Videos are recommended to reproduce and clarify what occurred. Include as much of the following as you can:
 

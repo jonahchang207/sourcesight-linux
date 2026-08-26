@@ -3,7 +3,7 @@
 #include "core/engine/cache/Cache.hpp"
 #include "gui/renderer/Renderer.hpp" // Circular dependency
 #include "gui/renderer/window/Window.hpp" // Circular dependency
-#include "assets/fonts/Icons.h";
+#include "assets/fonts/Icons.h"
 
 
 bool Menu::Init() {
@@ -42,9 +42,9 @@ void Menu::RenderImpl() {
 	static auto color_flags = ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_None;
 
 #ifdef _DEBUG
-	static auto title = "github.com/IMXNOOBX/cs2-external-esp (recode) [DEV]";
+	static auto title = "SourceSight [DEV]";
 #else
-	static auto title = "cs2-external-esp | recode";
+	static auto title = "SourceSight";
 #endif
 
 	ImGui::SetNextWindowSize(ImVec2(600, 370), ImGuiCond_FirstUseEver);
@@ -87,10 +87,7 @@ void Menu::RenderImpl() {
 				ImGui::SetCursorPosY(ImGui::GetCursorPos().y + space - 16.f * 3);
 
 				ImGui::Dummy(ImVec2(11, 0)); ImGui::SameLine();
-				ImGui::TextLinkOpenURL(Icons::DISCORD, "https://discord.gg/pRew8ZDkyp");
-				ImGui::SameLine();
-				ImGui::Dummy(ImVec2(11, 0)); ImGui::SameLine();
-				ImGui::TextLinkOpenURL(Icons::GITHUB, "https://github.com/IMXNOOBX/cs2-external-esp");
+				ImGui::TextLinkOpenURL(Icons::GITHUB, "https://github.com/jonahchang207/sourcesight-linux");
 				ImGui::Separator();
 
 				ImGui::Checkbox("Enable", &cfg::enabled);
@@ -433,7 +430,12 @@ void Menu::SetupStyles() {
 	auto& io = ImGui::GetIO();
 
 	io.Fonts->Clear();
+#ifdef _WIN32
 	io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\arial.ttf", 16.0f);
+#else
+	if (!io.Fonts->AddFontFromFileTTF("/usr/share/fonts/TTF/DejaVuSans.ttf", 16.0f))
+		io.Fonts->AddFontDefault();
+#endif
 
 	ImFontConfig merge_icon_cfg{};
 	merge_icon_cfg.FontDataOwnedByAtlas = false;

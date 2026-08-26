@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in improving **cs2-external-esp**.
+Thanks for your interest in improving **SourceSight**.
 
 ## What this project is
 

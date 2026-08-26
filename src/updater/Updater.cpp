@@ -23,7 +23,7 @@ bool Updater::InitImpl() {
 		LOGF(FATAL, "Failed to parse status json");
 
 	if (http_status != 200) {
-		LOGF(FATAL, "Server returned non successfull status code {}", http_status);
+		LOGF(FATAL, "Server returned non-successful status code {}", http_status);
 		return false;
 	}
 
@@ -43,13 +43,13 @@ bool Updater::InitImpl() {
 	}
 
 	if (status.unsafe)
-		LOGF(WARNING, "This application has been marked as \"Unsafe\" to use, its not recommended to proceed");
+		LOGF(WARNING, "This application has been marked as \"Unsafe\" to use; proceeding is not recommended");
 	else if (current_version < status.version_minimum)
 		LOGF(WARNING, "This application is \"Out Of Date\", and might not work as expected");
 	else if (status.version_current > current_version)
 		LOGF(WARNING, "There is a newer version available, current version is {} and github version is {}", current_version, status.version_current);
 	else if (status.version_current != current_version)
-		LOGF(WARNING, "Version missmatch detected, current version is {} and github version is {}", current_version, status.version_current);
+		LOGF(WARNING, "Version mismatch detected, current version is {} and GitHub version is {}", current_version, status.version_current);
 	else if (!status.notice.empty())
 		LOGF(WARNING, "Developer notice: {}", status.notice);
 
@@ -67,14 +67,14 @@ bool Updater::ProcessImpl() {
 #ifdef _WIN32
 		auto result = MessageBox(
 			NULL, 
-			"This application has been marked as \"Unsafe\" to use, its not recommended to proceed.\nDo you want to continue?"
-			"\n\nMore information available at: https://github.com/IMXNOOBX/cs2-external-esp"
+			"This application has been marked as \"Unsafe\" to use; proceeding is not recommended.\nDo you want to continue?"
+			"\n\nMore information available at: https://github.com/jonahchang207/sourcesight-linux"
 			"\n\nCtrl+C To copy this message",
 			"Unsafe | Warning", MB_ICONWARNING | MB_YESNO
 		);
 
 		if (result != IDYES) {
-			LOGF(VERBOSE, "User has opted to close application after it was warned about it been unsafe");
+			LOGF(VERBOSE, "User opted to close the application after the unsafe-build warning");
 			return false;
 		}
 #else
@@ -82,7 +82,7 @@ bool Updater::ProcessImpl() {
 		return false;
 #endif
 		
-		LOGF(WARNING, "User has opted to continue, even after been warned that the application is not safe to use");
+		LOGF(WARNING, "User opted to continue after being warned that the application is not safe to use");
 		return true;
 	}
 	
@@ -91,7 +91,7 @@ bool Updater::ProcessImpl() {
 		auto result = MessageBox(
 			NULL,
 			"This application is \"out-of-date\", and might not work as expected.\nDo you want to continue?"
-			"\n\nMore information available at: https://github.com/IMXNOOBX/cs2-external-esp"
+			"\n\nMore information available at: https://github.com/jonahchang207/sourcesight-linux"
 			"\n\nCtrl+C To copy this message",
 			"Out Of Date | Warning", MB_ICONWARNING | MB_YESNO
 		);
@@ -105,7 +105,7 @@ bool Updater::ProcessImpl() {
 		return false;
 #endif
 
-		LOGF(WARNING, "User has opted to continue, even after been warned that the application is \"out-of-date\"");
+		LOGF(WARNING, "User opted to continue after being warned that the application is \"out-of-date\"");
 		return true;
 	}
 

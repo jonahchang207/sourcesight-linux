@@ -16,12 +16,22 @@ void Overlays::Render() {
 bool Overlays::InitImpl() {
     auto& io = ImGui::GetIO();
 
-    ImFontConfig cfg{};
-    cfg.FontDataOwnedByAtlas = false;
+    ImFontConfig file_font_cfg{};
+    ImFontConfig embedded_font_cfg{};
+    embedded_font_cfg.FontDataOwnedByAtlas = false;
 
-	this->font = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\consola.ttf", 12.0f, &cfg);
-	this->font_alt = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\arial.ttf", 14.0f, &cfg);
-    this->font_icons = io.Fonts->AddFontFromMemoryTTF(weapon_icon_font, weapon_icon_font_len, 16.0f,  &cfg);
+#ifdef _WIN32
+	this->font = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\consola.ttf", 12.0f, &file_font_cfg);
+	this->font_alt = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\arial.ttf", 14.0f, &file_font_cfg);
+#else
+	this->font = io.Fonts->AddFontFromFileTTF("/usr/share/fonts/TTF/DejaVuSansMono.ttf", 12.0f, &file_font_cfg);
+	this->font_alt = io.Fonts->AddFontFromFileTTF("/usr/share/fonts/TTF/DejaVuSans.ttf", 14.0f, &file_font_cfg);
+	if (!this->font)
+		this->font = io.Fonts->AddFontDefault(&file_font_cfg);
+	if (!this->font_alt)
+		this->font_alt = io.Fonts->AddFontDefault(&file_font_cfg);
+#endif
+    this->font_icons = io.Fonts->AddFontFromMemoryTTF(weapon_icon_font, weapon_icon_font_len, 16.0f, &embedded_font_cfg);
 	
 	ImFontConfig merge_icon_cfg{};
 	merge_icon_cfg.FontDataOwnedByAtlas = false;
@@ -33,7 +43,7 @@ bool Overlays::InitImpl() {
     // Pre allocate buffer
     this->vel_buffer.resize(static_cast<size_t>(cfg::world::velocity::sample_rate * cfg::world::velocity::sample_length));
 
-    return true;
+    return this->font && this->font_alt && this->font_icons;
 }
 
 void Overlays::RenderImpl() {
@@ -72,7 +82,7 @@ void Overlays::RenderWatermark() {
 
     static int margin = 10;
     static int padding = 10;
-    std::string watermark_string = "cs2-external-esp";
+    std::string watermark_string = "SourceSight";
 
     watermark_string += std::format(" | {}fps", (int)io.Framerate);
 

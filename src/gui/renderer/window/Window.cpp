@@ -365,8 +365,8 @@ LRESULT CALLBACK window_procedure(HWND window, UINT msg, WPARAM wParam, LPARAM l
 		}
 		break;
 	}
-	case WM_DESTROY: // We dont handle this event
-		LOGF(VERBOSE, "Window procedure WM_DESTROY event triggered"); // We dont want to exit if a child window is closed, as they are when changing tabs
+	case WM_DESTROY: // We do not handle this event.
+		LOGF(VERBOSE, "Window procedure WM_DESTROY event triggered"); // Child windows close while tabs change, so do not exit here.
 		break;
 	case WM_CLOSE:
 		LOGF(VERBOSE, "Window procedure WM_CLOSE event triggered");

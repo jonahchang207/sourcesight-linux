@@ -38,17 +38,24 @@ bool Renderer::InitImpl() {
 
     if (!Window::CreateDevice()) {
         LOGF(FATAL, "Failed to create device");
+        Window::DespawnWindow();
         return false;
     }
 
     if (!Window::CreateImGui()) {
         LOGF(FATAL, "Failed to create ImGui");
+        Window::DestroyDevice();
+        Window::DespawnWindow();
         return false;
     }
 
-    Menu::Init();
-    Esp::Init();
-    Overlays::Init();
+    if (!Menu::Init() || !Esp::Init() || !Overlays::Init()) {
+        LOGF(FATAL, "Failed to initialize the interface");
+        Window::DestroyImGui();
+        Window::DestroyDevice();
+        Window::DespawnWindow();
+        return false;
+    }
 
 #ifdef _WIN32
     // Focus the game
@@ -71,14 +78,14 @@ bool Renderer::InitImpl() {
 
 void Renderer::DestroyImpl() {
     isRunning = false; // Prepare to stop thread loop
-    LOGF(VERBOSE, "Successfully programed renderer destruction...");
+    LOGF(VERBOSE, "Renderer shutdown requested...");
 }
 
 void Renderer::ThreadImpl() {
     while (isRunning) {
         Render();
 
-        // If the game is not focused dont do states, 
+        // If the game is not focused, do not process state changes,
         // or will start focusing game & overlay
         if (this->isFocused && HandleState())
             continue; // It will cause flickering if we handle window order after window closes
@@ -165,7 +172,7 @@ bool Renderer::HandleWindowOrder() {
     this->isFocused = (foreground == Window::hwnd || foreground == p->hwnd_);
 
     if (!this->isFocused && overlay_visible) {
-        LOGF(VERBOSE, "Hiding overlay window as the game its not focused");
+        LOGF(VERBOSE, "Hiding overlay window because the game is not focused");
         ShowWindow(Window::hwnd, SW_HIDE);
         overlay_visible = false;
         return true;

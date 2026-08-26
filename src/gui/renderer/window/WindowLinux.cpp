@@ -27,9 +27,15 @@ bool Window::SpawnWindow() {
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     GLFWmonitor* monitor = glfwGetPrimaryMonitor();
     const GLFWvidmode* mode = monitor ? glfwGetVideoMode(monitor) : nullptr;
-    if (!mode) return false;
+    if (!mode) {
+        glfwTerminate();
+        return false;
+    }
     hwnd = glfwCreateWindow(mode->width, mode->height, "SourceSight Linux", nullptr, nullptr);
-    if (!hwnd) return false;
+    if (!hwnd) {
+        glfwTerminate();
+        return false;
+    }
     glfwSetWindowPos(hwnd, 0, 0);
     glfwSetWindowAttrib(hwnd, GLFW_MOUSE_PASSTHROUGH, GLFW_TRUE);
     glfwMakeContextCurrent(hwnd);
@@ -53,7 +59,16 @@ bool Window::CreateImGui() {
     auto& io = ImGui::GetIO();
     io.IniFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    return ImGui_ImplGlfw_InitForOpenGL(hwnd, true) && ImGui_ImplOpenGL3_Init("#version 330");
+    if (!ImGui_ImplGlfw_InitForOpenGL(hwnd, true)) {
+        ImGui::DestroyContext();
+        return false;
+    }
+    if (!ImGui_ImplOpenGL3_Init("#version 330")) {
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+        return false;
+    }
+    return true;
 }
 
 void Window::DestroyImGui() {

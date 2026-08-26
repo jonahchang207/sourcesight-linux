@@ -18,7 +18,7 @@ public:
 	void SetAddress(DWORD64 address);
 	const char* ToString() const;
 public:
-	int target = 0;
+	std::uint32_t target = 0;
 	ObserverMode mode = ObserverMode::Alive;
 	
 private:

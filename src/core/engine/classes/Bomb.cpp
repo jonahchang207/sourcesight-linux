@@ -17,7 +17,7 @@ bool Bomb::Update() {
 	auto c4_ptr = p->read<uintptr_t>(client.base + offsets::weaponC4);
 	if (c4_ptr) {
 		if (auto e = p->read<uintptr_t>(c4_ptr))
-			carrier = (uintptr_t)p->read<int>(e + 0x520 /* Magic Offset? */);
+			carrier = p->read<std::uint32_t>(e + 0x520 /* Magic Offset? */);
 	}
 
 	this->address = p->read<uintptr_t>(client.base + offsets::plantedC4);

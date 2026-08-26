@@ -14,7 +14,7 @@ bool ObserverServices::Update() {
 		return false;
 
 	this->mode = p->read<ObserverMode>(this->address + offsets::observerServices::m_iObserverMode);
-	this->target = p->read<int>(this->address + offsets::observerServices::m_hObserverTarget);
+	this->target = p->read<std::uint32_t>(this->address + offsets::observerServices::m_hObserverTarget);
 
 	return true;
 }

@@ -2,5 +2,6 @@
 extend-exclude = [
   "**/include/**",
   "**/classes/**",
+  "src/external/**",
   "**/x64/**",
 ]

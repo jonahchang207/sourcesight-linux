@@ -12,7 +12,7 @@ public:
     bool Update();
     bool GetBounds(view_matrix_t matrix, Vec2_t size, std::pair<Vec2_t, Vec2_t>& bounds);
 public:
-    int8_t index = -1; // To use as invalid/un-initialize check
+    int8_t index = -1; // Sentinel for an uninitialized player.
 
     Vec3_t pos;
     Vec3_t vel;
@@ -42,7 +42,7 @@ public:
 
     std::vector<bone_pos> bone_list;
 
-    int pawn_controller_addr;
+    std::uint32_t pawn_controller_addr{};
     ObserverServices observer_services;
 private:
     uintptr_t list_entry;

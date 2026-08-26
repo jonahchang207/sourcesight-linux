@@ -117,7 +117,10 @@ DWORD64 Dumper::Scan(const std::string sig, ProcessModule module) {
     std::vector<DWORD64> list;
 
     //list = process->FindSignature(module, sig.data());
-    list = ScanMemory(sig, module.base, module.base + 0x4000000);
+    if (!module.base || !module.size)
+        return 0;
+
+    list = ScanMemory(sig, module.base, module.base + module.size);
 
     if (!list.size())
         return 0;

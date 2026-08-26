@@ -11,11 +11,17 @@ jobs:
     container: archlinux:base-devel
     steps:
       - name: Install build tools
-        run: pacman -Syu --noconfirm git cmake curl glfw-x11 libx11 libxrandr mesa
-      - uses: actions/checkout@v4
+        run: pacman -Syu --noconfirm git cmake curl glfw-x11 libx11 libxrandr mesa ttf-dejavu
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build build --parallel 2
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: sourcesight-linux
+          path: build/sourcesight
+          if-no-files-found: error

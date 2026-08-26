@@ -46,7 +46,7 @@ bool Player::GetPawn() {
 	auto p = Engine::GetProcess();
 	auto client = Engine::GetClient();
 
-	auto entity_pawn_address = p->read<uintptr_t>(controller + offsets::controller::m_hPawn);
+    const auto entity_pawn_address = p->read<std::uint32_t>(controller + offsets::controller::m_hPawn);
 
 	if (!entity_pawn_address)
 		return false;

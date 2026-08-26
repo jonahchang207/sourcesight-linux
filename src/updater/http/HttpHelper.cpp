@@ -18,6 +18,9 @@ int HttpHelper::GetImpl(std::string url, json& response) {
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_string);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 20L);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "SourceSight/115");
 
     CURLcode res = curl_easy_perform(curl);
 
@@ -27,7 +30,7 @@ int HttpHelper::GetImpl(std::string url, json& response) {
     curl_easy_cleanup(curl);
 
     if (res != CURLE_OK) {
-        LOGF(WARNING, "Curl returned a non successfull status code {}", (int)res);
+        LOGF(WARNING, "Curl returned a non-successful status code {}", (int)res);
         return -1;
     }
 
@@ -55,6 +58,9 @@ int HttpHelper::PostImpl(std::string url, json body, json& response) {
 
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_string);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 20L);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "SourceSight/115");
 
     // Set JSON header
     struct curl_slist* headers = nullptr;

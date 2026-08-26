@@ -24,7 +24,7 @@
     <ProjectGuid>{394ef5ce-9a9a-41ed-9287-2758ae0a5412}</ProjectGuid>
     <RootNamespace>src</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>cs2-external-esp</ProjectName>
+    <ProjectName>sourcesight</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

@@ -3,11 +3,11 @@
 #include "http/HttpHelper.hpp"
 
 struct Status {
-    bool unsafe;
+    bool unsafe = false;
     std::string notice;
 
-    int version_current;
-    int version_minimum;
+    int version_current = 0;
+    int version_minimum = 0;
 };
 
 class Updater {
@@ -19,7 +19,6 @@ public:
     Updater& operator=(Updater&&) = delete;
 
     static bool Init();
-    static bool Update(); // Not Implemented Yet
     static bool Process();
 
     static Status GetStatus();
@@ -38,5 +37,5 @@ private:
     Status status;
     bool isSetup = false;
     int current_version = 115;
-    std::string status_url = "https://github.com/jonahchang207/sourcesight-linux/raw/refs/heads/main/.github/status.json";
+    std::string status_url = "https://raw.githubusercontent.com/jonahchang207/sourcesight-linux/main/.github/status.json";
 };

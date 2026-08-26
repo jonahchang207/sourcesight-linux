@@ -15,30 +15,37 @@ void Esp::Render() {
 bool Esp::InitImpl() {
 	auto& io = ImGui::GetIO();
 
-	ImFontConfig cfg{};
-	cfg.FontDataOwnedByAtlas = false;
+	ImFontConfig file_font_cfg{};
+	ImFontConfig embedded_font_cfg{};
+	embedded_font_cfg.FontDataOwnedByAtlas = false;
 
-	this->font = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\consola.ttf", 12.0f, &cfg);
+#ifdef _WIN32
+	this->font = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\consola.ttf", 12.0f, &file_font_cfg);
+#else
+	this->font = io.Fonts->AddFontFromFileTTF("/usr/share/fonts/TTF/DejaVuSansMono.ttf", 12.0f, &file_font_cfg);
+	if (!this->font)
+		this->font = io.Fonts->AddFontDefault(&file_font_cfg);
+#endif
 
 	this->font_merged_icons = io.Fonts->AddFontFromMemoryTTF(
 		weapon_icon_font,
 		weapon_icon_font_len,
 		16.0f,
-		&cfg
+		&embedded_font_cfg
 	);
 
-	cfg.MergeMode = true;
+	embedded_font_cfg.MergeMode = true;
 
 	static const ImWchar general_ranges[] = { 0xE100, 0xE108, 0 };
 	io.Fonts->AddFontFromMemoryTTF(
 		icons_font,
 		icons_font_len,
 		16.0f,
-		&cfg,
+		&embedded_font_cfg,
 		general_ranges
 	);
 
-	return true;
+	return this->font && this->font_merged_icons;
 }
 
 void Esp::RenderImpl() {
@@ -74,7 +81,7 @@ void Esp::RenderImpl() {
 		if (cfg::esp::spotted && !player.spotted)
 			continue;
 
-		// Are we spectating the player in first person? then dont render
+		// Do not render the player currently being spectated in first person.
 		// TODO: Exception here when spectating someone
 		if (
 			local.observer_services.target == player.pawn_controller_addr

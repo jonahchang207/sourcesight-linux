@@ -1,19 +1,19 @@
 ---
 name: Bug Report
 about: Report bugs using this template, for Environment/General support please use
-  discord.
+  GitHub Discussions.
 title: "[BUG]"
 labels: bug
-assignees: IMXNOOBX
+assignees: jonahchang207
 
 ---
 
 ### **Before Submitting**
 ⚠️ **Is this a bug related to the code?**
 - [ ] Yes, this is a bug in the code.
-- [ ] No, this is a general support question (please use [Discord](https://discord.gg/pRew8ZDkyp) instead).
+- [ ] No, this is a general support question (please open a [Discussion](https://github.com/jonahchang207/sourcesight-linux/discussions) instead).
 
-If you selected "No," please close this issue and post in Discord or Discussions.
+If you selected "No," please close this issue and post in GitHub Discussions.
 
 ---
 

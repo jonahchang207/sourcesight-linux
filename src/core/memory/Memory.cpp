@@ -262,9 +262,20 @@ uint32_t pProcess::FindProcessIdByProcessName(const char* process_name) {
 bool pProcess::AttachProcess(const char* process_name) {
     pid_ = static_cast<pid_t>(FindProcessIdByProcessName(process_name));
     if (!pid_) return false;
-    handle_ = 1;
     base_client_ = GetModule("libclient.so");
     if (!base_client_.base) base_client_ = GetModule("client.so");
+    if (!base_client_.base) {
+        pid_ = 0;
+        return false;
+    }
+
+    std::uint8_t probe{};
+    iovec local{&probe, sizeof(probe)};
+    iovec remote{reinterpret_cast<void*>(base_client_.base), sizeof(probe)};
+    if (process_vm_readv(pid_, &local, 1, &remote, 1, 0) != static_cast<ssize_t>(sizeof(probe)))
+        return false;
+
+    handle_ = 1;
     return true;
 }
 
