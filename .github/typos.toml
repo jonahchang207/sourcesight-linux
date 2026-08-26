@@ -6,6 +6,6 @@ extend-exclude = [
   "**/x64/**",
 ]
 
-[default.extend-identifiers]
+[default.extend-words]
 # CS2 resource identifiers use "variante" to mean "variant e".
 variante = "variante"
