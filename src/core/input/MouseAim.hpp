@@ -82,6 +82,7 @@ private:
     // Which player the lock is currently on, and whether their head is in
     // our line of sight. Shown as a cyan (hidden) / magenta (visible) marker.
     static int locked_player_index_;
+    static int prev_locked_index_;
     static bool target_visible_;
 
     static double last_update_;

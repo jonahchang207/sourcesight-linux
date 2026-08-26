@@ -46,6 +46,9 @@ bool Config::ReadImpl() {
 		cfg::esp::armor = data["esp"].value("armor", true);
 		cfg::esp::health = data["esp"].value("health", true);
 		cfg::esp::spotted = data["esp"].value("spotted", false);
+		cfg::esp::spotted_only = data["esp"].value("spotted_only", false);
+		cfg::esp::distance = data["esp"].value("distance", true);
+		cfg::esp::headshot_line = data["esp"].value("headshot_line", false);
 		cfg::esp::skeleton = data["esp"].value("skeleton", true);
 		cfg::esp::head_tracker = data["esp"].value("head_tracker", true);
 		cfg::esp::head_tracker_filled = data["esp"].value("head_tracker_filled", false);
@@ -153,9 +156,10 @@ bool Config::ReadImpl() {
 		// utils
 		//cfg::settings::console = data["utils"].value("console", true);
 		cfg::settings::watermark = data["utils"].value("watermark", true);
-		cfg::settings::streamproof = data["utils"].value("streamproof", false);
+		cfg::settings::streamproof = data["utils"].value("streamproof", true);
 		cfg::settings::vsync = data["utils"].value("vsync", true);
 		cfg::settings::free_cpu = data["utils"].value("free_cpu", true);
+		cfg::settings::panic_key = data["utils"].value("panic_key", true);
 		//cfg::settings::open_menu_key = data["utils"].value("open_menu_key", 0);
 
 		// macro (guard: older configs may not have the section, and operator[] on
@@ -163,6 +167,7 @@ bool Config::ReadImpl() {
 		if (data.contains("macro")) {
 			cfg::macro::awp_quickswitch = data["macro"].value("awp_quickswitch", false);
 			cfg::macro::delay_ms = data["macro"].value("delay_ms", 100);
+			cfg::macro::auto_switch_all = data["macro"].value("auto_switch_all", true);
 		}
 
 		// aim (kernel mouse aiming)
@@ -174,8 +179,34 @@ bool Config::ReadImpl() {
 			cfg::aim::deadzone = aim.value("deadzone", 3.0f);
 			cfg::aim::max_delta = aim.value("max_delta", 500.0f);
 			cfg::aim::speed = aim.value("speed", 800.0f);			cfg::aim::hotkey = aim.value("hotkey", true);
+			cfg::aim::visible_only = aim.value("visible_only", false);
+			cfg::aim::auto_start = aim.value("auto_start", false);
 			cfg::aim::target_part = aim.value("target_part", 3);
+			cfg::aim::rifle_mult = aim.value("rifle_mult", 1.0f);
+			cfg::aim::pistol_mult = aim.value("pistol_mult", 1.2f);
+			cfg::aim::sniper_mult = aim.value("sniper_mult", 0.7f);
+			cfg::aim::smg_mult = aim.value("smg_mult", 1.1f);
+			cfg::aim::recoil_compensation = aim.value("recoil_compensation", 0.0f);
+			cfg::aim::target_switch_delay = aim.value("target_switch_delay", 0.0f);
+			cfg::aim::deadzone = aim.value("deadzone", 1.0f);
+			cfg::aim::max_delta = aim.value("max_delta", 15.0f);
+			cfg::aim::speed = aim.value("speed", 900.0f);
 			cfg::aim::fov_radius = aim.value("fov_radius", 350.0f);
+		}
+
+		// bypass
+		if (data.contains("bypass")) {
+			const auto& bp = data["bypass"];
+			cfg::bypass::timing_jitter = bp.value("timing_jitter", true);
+			cfg::bypass::humanize_movement = bp.value("humanize_movement", true);
+			cfg::bypass::write_delay_min_us = bp.value("write_delay_min_us", 50);
+			cfg::bypass::write_delay_max_us = bp.value("write_delay_max_us", 200);
+			cfg::bypass::noise_amplitude = bp.value("noise_amplitude", 0.3f);
+		}
+
+		// audio
+		if (data.contains("audio")) {
+			cfg::audio::lock_sound = data["audio"].value("lock_sound", false);
 		}
 	}
 	catch (const std::exception& e) {
@@ -211,6 +242,9 @@ bool Config::WriteImpl() {
 	data["esp"]["head_tracker"] = cfg::esp::head_tracker;
 	data["esp"]["head_tracker_filled"] = cfg::esp::head_tracker_filled;
 	data["esp"]["spotted"] = cfg::esp::spotted;
+	data["esp"]["spotted_only"] = cfg::esp::spotted_only;
+	data["esp"]["distance"] = cfg::esp::distance;
+	data["esp"]["headshot_line"] = cfg::esp::headshot_line;
 	data["esp"]["tracers"] = cfg::esp::tracers;
 	data["esp"]["bomb"] = cfg::esp::bomb;
 
@@ -313,11 +347,13 @@ bool Config::WriteImpl() {
 	data["utils"]["streamproof"] = cfg::settings::streamproof;
 	data["utils"]["vsync"] = cfg::settings::vsync;
 	data["utils"]["free_cpu"] = cfg::settings::free_cpu;
+	data["utils"]["panic_key"] = cfg::settings::panic_key;
 	//data["utils"]["open_menu_key"] = cfg::settings::open_menu_key;
 
 	// macro
 	data["macro"]["awp_quickswitch"] = cfg::macro::awp_quickswitch;
 	data["macro"]["delay_ms"] = cfg::macro::delay_ms;
+	data["macro"]["auto_switch_all"] = cfg::macro::auto_switch_all;
 
 	// aim (kernel mouse aiming)
 	data["aim"]["enabled"] = cfg::aim::enabled;
@@ -327,8 +363,26 @@ bool Config::WriteImpl() {
 	data["aim"]["max_delta"] = cfg::aim::max_delta;
 	data["aim"]["speed"] = cfg::aim::speed;
 	data["aim"]["hotkey"] = cfg::aim::hotkey;
+	data["aim"]["visible_only"] = cfg::aim::visible_only;
+	data["aim"]["auto_start"] = cfg::aim::auto_start;
 	data["aim"]["target_part"] = cfg::aim::target_part;
+	data["aim"]["rifle_mult"] = cfg::aim::rifle_mult;
+	data["aim"]["pistol_mult"] = cfg::aim::pistol_mult;
+	data["aim"]["sniper_mult"] = cfg::aim::sniper_mult;
+	data["aim"]["smg_mult"] = cfg::aim::smg_mult;
+	data["aim"]["recoil_compensation"] = cfg::aim::recoil_compensation;
+	data["aim"]["target_switch_delay"] = cfg::aim::target_switch_delay;
 	data["aim"]["fov_radius"] = cfg::aim::fov_radius;
+
+	// bypass
+	data["bypass"]["timing_jitter"] = cfg::bypass::timing_jitter;
+	data["bypass"]["humanize_movement"] = cfg::bypass::humanize_movement;
+	data["bypass"]["write_delay_min_us"] = cfg::bypass::write_delay_min_us;
+	data["bypass"]["write_delay_max_us"] = cfg::bypass::write_delay_max_us;
+	data["bypass"]["noise_amplitude"] = cfg::bypass::noise_amplitude;
+
+	// audio
+	data["audio"]["lock_sound"] = cfg::audio::lock_sound;
 
 	f << std::setw(4) << data << std::endl;
 	f.close();

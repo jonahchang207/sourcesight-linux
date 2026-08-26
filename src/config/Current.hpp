@@ -21,17 +21,16 @@ namespace cfg {
 		inline bool health_number = false;
 
 		inline bool spotted = false;
+		inline bool spotted_only = false;   // Only render spotted (visible) enemies
+		inline bool distance = true;       // Show distance to player
+		inline bool headshot_line = false;  // Line from crosshair to enemy head
 
 		inline bool tracers = false;
 
 		namespace bullet_tracer {
 			inline bool enabled = false;
-			// Max trace distance when the shot does not hit a player (world hits
-			// cannot be traced from an external process).
 			inline float length = 300.0f;
-			// How long the tracer stays visible before disappearing.
 			inline float duration = 5.0f;
-			// Forward extension from the hand grip to approximate the barrel tip.
 			inline float muzzle_offset = 45.0f;
 			inline float thickness = 1.5f;
 
@@ -44,7 +43,7 @@ namespace cfg {
 		namespace flags {
 			inline bool name = true;
 			inline bool ping = true;
-			inline bool weapon = false;
+			inline bool weapon = true;        // Now on by default
 			inline bool ammo = false;
 			inline bool reloading = false;
 			inline bool defusing = false;
@@ -68,7 +67,9 @@ namespace cfg {
 			inline color_t tracer_enemy{ 1.f, 0.f, 0.f, 0.5f };
 
 			inline color_t bomb{ 1.f, 0.84f, 0.f, 1.f };
-			
+
+			inline color_t headshot_line{ 1.f, 0.2f, 0.2f, 0.7f };
+
 			namespace flags {
 				inline color_t flashed_team{ 1.f, 1.f, 1.f, 0.5f };
 				inline color_t flashed_enemy{ 1.f, 1.f, 1.f, 0.8f };
@@ -85,18 +86,14 @@ namespace cfg {
 				inline color_t c4_team{ 1.f, 0.84f, 0.f, 1.f };
 				inline color_t c4_enemy{ 1.f, 0.84f, 0.f, 1.f };
 			}
-			
 		}
-
 	}
 
 	namespace world {
 		namespace spectators {
 			inline bool enabled = false;
-
 			inline bool detailed = false;
 			inline bool self_only = true;
-
 			inline Vec2_t pos{ 10.f, 100.f };
 		}
 
@@ -107,16 +104,16 @@ namespace cfg {
 		}
 
 		namespace crosshair {
-			inline bool enabled = false;
-			inline bool sniper_only = true;
-			inline bool center_dot = false;
+			inline bool enabled = true;       // On by default now
+			inline bool sniper_only = false;   // Show for all weapons
+			inline bool center_dot = true;
 			inline bool outline = true;
 			inline float gap = 6.0f;
 			inline float length = 6.0f;
 			inline float thickness = 1.0f;
-			inline float center_dot_size = 1.5f;
+			inline float center_dot_size = 2.0f;
 			inline float outline_thickness = 1.0f;
-			inline color_t color{ 1.f, 1.f, 1.f, 1.f };
+			inline color_t color{ 0.f, 0.7f, 1.f, 1.f };
 		}
 
 		namespace radar {
@@ -131,7 +128,6 @@ namespace cfg {
 			inline bool enabled = false;
 			inline int sample_rate = 35;
 			inline float sample_length = 5.f;
-
 			inline Vec2_t size{ 400.f, 100.f };
 			inline Vec2_t pos{ 10.f, 400.f };
 		}
@@ -139,32 +135,57 @@ namespace cfg {
 
 	namespace settings {
 		inline bool watermark = true;
-		inline bool streamproof = false;
+		inline bool streamproof = true;    // On by default for safety
 		inline bool vsync = false;
 		inline bool free_cpu = true;
+		inline bool panic_key = true;      // Press End to disable everything
 	}
 
 	namespace macro {
 		inline bool awp_quickswitch = false;
 		inline int delay_ms = 100;
+		inline bool auto_switch_all = true; // Quick-switch for all bolt-action weapons
 	}
 
-	// Kernel mouse aiming: screen-space target tracking through
-	// /dev/person-mouse.  See core/input/MouseAim for the algorithms.
+	// Kernel mouse aiming.
 	namespace aim {
 		inline bool enabled = false;
 		inline bool game_mode = true;
 		inline bool aim_at_enemies = true;
 		inline bool hotkey = true;
+		inline bool visible_only = false;   // Only aim at visible (non-occluded) targets
+		inline bool auto_start = false;     // Auto-enable aim when round starts
 
-		// 0 = head, 1 = body (chest), 2 = legs, 3 = in-between body & head (neck/spine1)
+		// 0 = head, 1 = body (chest), 2 = legs, 3 = in-between body & head
 		inline int target_part = 3;
 
-		// Tuned for smooth, human-like aim that looks legit.
+		// Weapon-specific speed multipliers (fraction of base speed).
+		inline float rifle_mult = 1.0f;
+		inline float pistol_mult = 1.2f;
+		inline float sniper_mult = 0.7f;
+		inline float smg_mult = 1.1f;
+
+		inline float recoil_compensation = 0.0f; // 0-1: how much to counter recoil
+		inline float target_switch_delay = 0.0f; // Seconds before switching targets
+
 		inline float deadzone = 1.0f;
-		inline float max_delta = 12.0f;
-		inline float speed = 650.0f;
+		inline float max_delta = 15.0f;
+		inline float speed = 900.0f;           // Increased from 650
 		inline float fov_radius = 350.0f;
+	}
+
+	// Bypass / anti-detection.
+	namespace bypass {
+		inline bool timing_jitter = true;     // Randomise write timing
+		inline bool humanize_movement = true;  // Add micro-noise to mouse deltas
+		inline int write_delay_min_us = 50;    // Min delay between writes (us)
+		inline int write_delay_max_us = 200;   // Max delay between writes (us)
+		inline float noise_amplitude = 0.3f;   // Pixels of random noise per write
+	}
+
+	// Audio feedback.
+	namespace audio {
+		inline bool lock_sound = false;        // Play a sound on target lock
 	}
 
 	// Not stored, just for testing

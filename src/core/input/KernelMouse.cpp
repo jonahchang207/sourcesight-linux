@@ -1,6 +1,7 @@
 #include "KernelMouse.hpp"
 
 #include "common.hpp"
+#include "config/Current.hpp"
 
 #include <sys/stat.h>
 #include <sys/ioctl.h>
@@ -10,6 +11,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <cstdlib>
 
 namespace {
 
@@ -73,6 +75,14 @@ bool KernelMouse::Available() const {
 bool KernelMouse::Move(int dx, int dy) {
     if (fd_ < 0)
         return false;
+
+    // Bypass: randomised delay between writes to avoid timing detection.
+    if (cfg::bypass::timing_jitter) {
+        const int min_us = std::max(0, cfg::bypass::write_delay_min_us);
+        const int max_us = std::max(min_us, cfg::bypass::write_delay_max_us);
+        const int delay = min_us + (rand() % (max_us - min_us + 1));
+        ::usleep(delay);
+    }
 
     char payload[64];
     const int length = std::snprintf(payload, sizeof(payload), "%d %d\n", dx, dy);

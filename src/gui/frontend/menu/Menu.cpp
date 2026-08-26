@@ -197,6 +197,11 @@ void Menu::RenderImpl() {
 						ImGui::SetItemTooltip("Uses CS2's spotted state. This is not a geometric line-of-sight check.");
 
 						ImGui::Checkbox("Show Team", &cfg::esp::team);
+						ImGui::Checkbox("Spotted only", &cfg::esp::spotted_only);
+						ImGui::SetItemTooltip("Only render enemies you can actually see");
+						ImGui::Checkbox("Distance", &cfg::esp::distance);
+						ImGui::Checkbox("Headshot line", &cfg::esp::headshot_line);
+						ImGui::SetItemTooltip("Line from crosshair to enemy head");
 					}
 					ImGui::EndGroup();
 
@@ -380,12 +385,14 @@ void Menu::RenderImpl() {
 					{
 						ImGui::Checkbox("Game mode (CS2)", &cfg::aim::game_mode);
 						ImGui::Checkbox("Aim at enemies", &cfg::aim::aim_at_enemies);
+						ImGui::Checkbox("Visible only", &cfg::aim::visible_only);
+						ImGui::SetItemTooltip("Only lock onto targets you can see");
+						ImGui::Checkbox("Auto-start aim", &cfg::aim::auto_start);
 
 						ImGui::Spacing();
 						ImGui::Separator();
 						ImGui::Spacing();
 
-						// Body part target selector
 						static const char* target_parts[] = { "Head", "Body", "Legs", "Neck / Mid-body" };
 						int tp = cfg::aim::target_part;
 						if (ImGui::Combo("Target", &tp, target_parts, 4))
@@ -393,7 +400,21 @@ void Menu::RenderImpl() {
 
 						ImGui::Spacing();
 
-						// FOV radius
+						// Weapon speed multipliers
+						ImGui::Text("Weapon Speed");
+						ImGui::SliderFloat("Rifle", &cfg::aim::rifle_mult, 0.2f, 3.0f, "x%.1f");
+						ImGui::SliderFloat("Pistol", &cfg::aim::pistol_mult, 0.2f, 3.0f, "x%.1f");
+						ImGui::SliderFloat("Sniper", &cfg::aim::sniper_mult, 0.2f, 3.0f, "x%.1f");
+						ImGui::SliderFloat("SMG", &cfg::aim::smg_mult, 0.2f, 3.0f, "x%.1f");
+
+						ImGui::Spacing();
+						ImGui::SliderFloat("Recoil comp", &cfg::aim::recoil_compensation, 0.0f, 1.0f, "%.0f%%");
+						ImGui::SliderFloat("Switch delay", &cfg::aim::target_switch_delay, 0.0f, 0.5f, "%.2fs");
+
+						ImGui::Spacing();
+						ImGui::Separator();
+						ImGui::Spacing();
+
 						float aim_w = 1920.0f;
 						float aim_h = 1080.0f;
 						MouseAim::ScreenSize(aim_w, aim_h);
@@ -406,7 +427,7 @@ void Menu::RenderImpl() {
 
 					ImGui::Spacing();
 					ImGui::TextWrapped(
-						"Only enable in environments where input automation is allowed."
+						"F9: panic key (disables all). MB5: toggle aim."
 					);
 				}
 				else if (active_tab == Tab::MACRO)
@@ -424,6 +445,8 @@ void Menu::RenderImpl() {
 					ImGui::BeginDisabled(!cfg::macro::awp_quickswitch);
 					{
 						ImGui::SliderInt("Switch delay (ms)", &cfg::macro::delay_ms, 20, 500);
+						ImGui::Checkbox("All bolt-action weapons", &cfg::macro::auto_switch_all);
+						ImGui::SetItemTooltip("Apply quick-switch to Scout, G3SG1, SCAR-20 too");
 					}
 					ImGui::EndDisabled();
 
@@ -454,7 +477,21 @@ void Menu::RenderImpl() {
 
 					ImGui::Checkbox("Free CPU", &cfg::settings::free_cpu);
 					ImGui::SetItemTooltip("Let the CPU sleep to Free Resources\nNOTE: might cause performance issues in lower end computers!");
+					ImGui::Checkbox("Panic key (F9)", &cfg::settings::panic_key);
+					ImGui::SetItemTooltip("Press F9 to instantly disable all cheats");
 
+					ImGui::Spacing();
+					ImGui::Text("Bypass");
+					ImGui::Separator();
+					ImGui::Checkbox("Timing jitter", &cfg::bypass::timing_jitter);
+					ImGui::SetItemTooltip("Randomise write timing to avoid detection");
+					ImGui::Checkbox("Humanize movement", &cfg::bypass::humanize_movement);
+					ImGui::SetItemTooltip("Add micro-noise to mouse deltas");
+					ImGui::SliderInt("Write delay min (us)", &cfg::bypass::write_delay_min_us, 0, 500);
+					ImGui::SliderInt("Write delay max (us)", &cfg::bypass::write_delay_max_us, 0, 1000);
+					ImGui::SliderFloat("Noise amplitude", &cfg::bypass::noise_amplitude, 0.0f, 2.0f, "%.1f px");
+
+					ImGui::Spacing();
 					ImGui::Text("Notes");
 					ImGui::Separator();
 					ImGui::TextWrapped(

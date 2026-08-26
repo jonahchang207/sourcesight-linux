@@ -198,6 +198,10 @@ void Esp::RenderPlayer(Player player, bool mate) {
 	if (!player.alive)
 		return;
 
+	// Spotted-only filter: skip rendering enemies we cannot see.
+	if (!mate && cfg::esp::spotted_only && !player.spotted)
+		return;
+
 	if (cfg::esp::box) {
 		auto color = mate ? cfg::esp::colors::box_team : cfg::esp::colors::box_enemy;
 
@@ -225,6 +229,16 @@ void Esp::RenderPlayer(Player player, bool mate) {
 
 	RenderPlayerBars(player, bounds);
 	RenderPlayerFlags(player, bounds, mate);
+
+	// Headshot line: from the screen centre (crosshair) to the enemy head.
+	if (cfg::esp::headshot_line && !mate &&
+		player.bone_list.size() > static_cast<size_t>(bone_index::head)) {
+		Vec2_t head;
+		if (matrix.wts(player.bone_list[bone_index::head].pos, io.DisplaySize, head)) {
+			const ImVec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
+			d->AddLine(center, head, ImColor(cfg::esp::colors::headshot_line), 1.0f);
+		}
+	}
 }
 
 void Esp::RenderPlayerBones(Player player, bool mate) {
@@ -352,6 +366,25 @@ void Esp::RenderPlayerFlags(Player player, std::pair<Vec2_t, Vec2_t> bounds, boo
 			), 
 			IM_COL32(255, 255, 255, 255),
 			sanitized_name.data()
+		);
+	}
+
+	// Distance display below the name
+	if (cfg::esp::distance) {
+		const auto& local = Cache::Get().local;
+		const float dx = player.pos.x - local.pos.x;
+		const float dy = player.pos.y - local.pos.y;
+		const float dz = player.pos.z - local.pos.z;
+		const int dist = static_cast<int>(std::sqrt(dx*dx + dy*dy + dz*dz) * 0.01905f); // Source units to metres
+		auto dist_str = std::format("{}m", dist);
+		auto dist_size = ImGui::CalcTextSize(dist_str.c_str());
+		d->AddText(
+			Vec2_t(
+				(bounds.first.x + bounds.second.x) / 2 - dist_size.x / 2,
+				bounds.first.y - 34
+			),
+			IM_COL32(200, 200, 200, 200),
+			dist_str.c_str()
 		);
 	}
 
