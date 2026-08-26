@@ -4,8 +4,10 @@
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 #define GLFW_EXPOSE_NATIVE_X11
+#define Window X11Window
 #include <GLFW/glfw3native.h>
 #include <X11/Xlib.h>
+#undef Window
 #include <GL/gl.h>
 #include <imgui/backends/imgui_impl_glfw.h>
 #include <imgui/backends/imgui_impl_opengl3.h>
