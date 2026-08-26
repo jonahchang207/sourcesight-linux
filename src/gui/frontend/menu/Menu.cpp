@@ -37,9 +37,9 @@ void Menu::RenderImpl() {
 	if (!isSetup)
 		return;
 
-	static auto io = ImGui::GetIO();
-	static auto screen = io.DisplaySize;
-	static auto color_flags = ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_None;
+	auto& io = ImGui::GetIO();
+	const auto screen = io.DisplaySize;
+	static auto color_flags = ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel;
 
 #ifdef _DEBUG
 	static auto title = "SourceSight [DEV]";
@@ -47,32 +47,34 @@ void Menu::RenderImpl() {
 	static auto title = "SourceSight";
 #endif
 
-	ImGui::SetNextWindowSize(ImVec2(600, 370), ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowPos(ImVec2(screen.x / 2 - 300, screen.y / 2 - 150), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2(720, 520), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSizeConstraints(ImVec2(640, 420), ImVec2(960, 760));
+	ImGui::SetNextWindowPos(ImVec2(screen.x * 0.5f, screen.y * 0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
 
-	ImGui::GetWindowPos();
-	if (ImGui::Begin(title, nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize)) {
+	if (ImGui::Begin(title, nullptr, ImGuiWindowFlags_NoCollapse)) {
 		this->pos = ImGui::GetWindowPos();
 		this->size = ImGui::GetWindowSize();
 
 		static int active_tab = 0;
 
-		if (ImGui::BeginChild("##main_split"))
+		const bool main_split_visible = ImGui::BeginChild("##main_split", ImVec2(0, 0), ImGuiChildFlags_None);
+		if (main_split_visible)
 		{
 			auto size = ImGui::GetContentRegionAvail();
 
-			ImGui::BeginChild("##tab_buttons", ImVec2(120, size.y), true);
+			ImGui::BeginChild("##tab_buttons", ImVec2(148, size.y), ImGuiChildFlags_Borders);
 			{
-				ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.1f, 0.5f));
+				ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.08f, 0.5f));
+				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 7.0f));
 				for (const auto& tab : tabs)
 				{
 					bool is_active = (active_tab == tab.id);
 
 					if (is_active)
 					{
-						ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
-						ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
-						ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+						ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.10f, 0.36f, 0.56f, 1.0f));
+						ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.12f, 0.42f, 0.64f, 1.0f));
+						ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.08f, 0.30f, 0.48f, 1.0f));
 					}
 
 					if (ImGui::Button((tab.icon + " " + tab.label).c_str(), ImVec2(-1, 28)))
@@ -81,16 +83,17 @@ void Menu::RenderImpl() {
 					if (is_active) 
 						ImGui::PopStyleColor(3);
 				}
-				ImGui::PopStyleVar(1);
+				ImGui::PopStyleVar(2);
 
 				auto space = ImGui::GetContentRegionAvail().y;
-				ImGui::SetCursorPosY(ImGui::GetCursorPos().y + space - 16.f * 3);
+				ImGui::SetCursorPosY(ImGui::GetCursorPos().y + std::max(0.0f, space - 76.0f));
 
 				ImGui::Dummy(ImVec2(11, 0)); ImGui::SameLine();
 				ImGui::TextLinkOpenURL(Icons::GITHUB, "https://github.com/jonahchang207/sourcesight-linux");
 				ImGui::Separator();
 
-				ImGui::Checkbox("Enable", &cfg::enabled);
+				ImGui::TextDisabled("STATUS");
+				ImGui::Checkbox("Overlay enabled", &cfg::enabled);
 			}
 			ImGui::EndChild();
 
@@ -99,7 +102,7 @@ void Menu::RenderImpl() {
 
 			ImGui::BeginDisabled(!cfg::enabled);
 
-			ImGui::BeginChild("##tab_content", ImVec2(0, size.y), true);
+			ImGui::BeginChild("##tab_content", ImVec2(0, size.y), ImGuiChildFlags_Borders);
 			{
 				if (active_tab == Tab::PLAYER)
 				{
@@ -115,6 +118,10 @@ void Menu::RenderImpl() {
 							ImGui::ColorEdit4("Team box color", cfg::esp::colors::box_team.data(), color_flags);
 							ImGui::SameLine();
 							ImGui::ColorEdit4("Enemy box color", cfg::esp::colors::box_enemy.data(), color_flags);
+							ImGui::Checkbox("Filled", &cfg::esp::box_filled);
+							if (cfg::esp::box_filled)
+								ImGui::SliderFloat("Fill alpha", &cfg::esp::box_fill_alpha, 0.02f, 1.0f, "%.2f");
+							ImGui::SliderFloat("Box thickness", &cfg::esp::box_thickness, 1.0f, 4.0f, "%.1f");
 						}
 						ImGui::EndDisabled();
 
@@ -125,6 +132,7 @@ void Menu::RenderImpl() {
 							ImGui::ColorEdit4("Team skeleton color", cfg::esp::colors::skeleton_team.data(), color_flags);
 							ImGui::SameLine();
 							ImGui::ColorEdit4("Enemy skeleton color", cfg::esp::colors::skeleton_enemy.data(), color_flags);
+							ImGui::SliderFloat("Skeleton thickness", &cfg::esp::skeleton_thickness, 1.0f, 4.0f, "%.1f");
 						}
 						ImGui::EndDisabled();
 
@@ -132,6 +140,7 @@ void Menu::RenderImpl() {
 						ImGui::BeginDisabled(!cfg::esp::head_tracker);
 						{
 							ImGui::Checkbox("Filled Head Tracker", &cfg::esp::head_tracker_filled);
+							ImGui::SliderFloat("Head tracker size", &cfg::esp::head_tracker_size, 2.0f, 14.0f, "%.1f");
 							ImGui::SameLine();
 							ImGui::ColorEdit4("Team head tracker color", cfg::esp::colors::tracker_team.data(), color_flags);
 							ImGui::SameLine();
@@ -146,6 +155,7 @@ void Menu::RenderImpl() {
 							ImGui::ColorEdit4("Team tracer color", cfg::esp::colors::tracer_team.data(), color_flags);
 							ImGui::SameLine();
 							ImGui::ColorEdit4("Enemy tracer color", cfg::esp::colors::tracer_enemy.data(), color_flags);
+							ImGui::SliderFloat("Tracer thickness", &cfg::esp::tracer_thickness, 1.0f, 4.0f, "%.1f");
 						}
 						ImGui::EndDisabled();
 					}
@@ -160,8 +170,8 @@ void Menu::RenderImpl() {
 							ImGui::Checkbox("Health Number", &cfg::esp::health_number);
 						ImGui::Checkbox("Armor", &cfg::esp::armor);
 
-						ImGui::Checkbox("Spotted", &cfg::esp::spotted);
-						ImGui::SetItemTooltip("Esp will only be visible if the player has been spotted by you");
+						ImGui::Checkbox("Game-spotted only", &cfg::esp::spotted);
+						ImGui::SetItemTooltip("Uses CS2's spotted state. This is not a geometric line-of-sight check.");
 
 						ImGui::Checkbox("Show Team", &cfg::esp::team);
 					}
@@ -269,13 +279,29 @@ void Menu::RenderImpl() {
 					ImGui::Separator();
 
 					ImGui::Checkbox("Crosshair", &cfg::world::crosshair::enabled);
-					ImGui::Checkbox("Velocity Graph", &cfg::world::velocity::enabled);
-				#ifdef _DEBUG // Part of the velocity graph for developers
-					if (cfg::world::velocity::enabled) {
-						ImGui::SliderInt("Sample rate", &cfg::world::velocity::sample_rate, 1, 100);
-						ImGui::SliderFloat("Sample length", &cfg::world::velocity::sample_length, 1, 20, "%.1f");
+					ImGui::BeginDisabled(!cfg::world::crosshair::enabled);
+					{
+						ImGui::Checkbox("Snipers only", &cfg::world::crosshair::sniper_only);
+						ImGui::Checkbox("Center dot", &cfg::world::crosshair::center_dot);
+						ImGui::Checkbox("Outline", &cfg::world::crosshair::outline);
+						ImGui::ColorEdit4("Crosshair color", cfg::world::crosshair::color.data(), color_flags);
+						ImGui::SliderFloat("Crosshair gap", &cfg::world::crosshair::gap, 0.0f, 20.0f, "%.1f");
+						ImGui::SliderFloat("Crosshair length", &cfg::world::crosshair::length, 1.0f, 20.0f, "%.1f");
+						ImGui::SliderFloat("Crosshair thickness", &cfg::world::crosshair::thickness, 1.0f, 5.0f, "%.1f");
+						if (cfg::world::crosshair::center_dot)
+							ImGui::SliderFloat("Center dot size", &cfg::world::crosshair::center_dot_size, 0.5f, 5.0f, "%.1f");
+						if (cfg::world::crosshair::outline)
+							ImGui::SliderFloat("Outline thickness", &cfg::world::crosshair::outline_thickness, 0.5f, 3.0f, "%.1f");
 					}
-				#endif
+					ImGui::EndDisabled();
+
+					ImGui::Checkbox("Velocity Graph", &cfg::world::velocity::enabled);
+					ImGui::BeginDisabled(!cfg::world::velocity::enabled);
+					{
+						ImGui::SliderInt("Sample rate", &cfg::world::velocity::sample_rate, 1, 100);
+						ImGui::SliderFloat("Sample length", &cfg::world::velocity::sample_length, 1.0f, 20.0f, "%.1f");
+					}
+					ImGui::EndDisabled();
 					ImGui::Spacing();
 
 					ImGui::Text("Radar");
@@ -351,9 +377,8 @@ void Menu::RenderImpl() {
 			ImGui::EndDisabled();
 
 
-			ImGui::EndChild();
 		}
-
+		ImGui::EndChild();
 	}
 
 	ImGui::End();
@@ -364,15 +389,15 @@ void Menu::SetupStyles() {
 	style.Colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
 	style.Colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
 
-	style.Colors[ImGuiCol_WindowBg] = ImColor(10, 10, 10);
-	style.Colors[ImGuiCol_ChildBg] = ImColor(10, 10, 10);
-	style.Colors[ImGuiCol_PopupBg] = ImVec4(0.13f, 0.14f, 0.15f, 1.00f);
-	style.Colors[ImGuiCol_Border] = ImColor(50, 50, 50);
+	style.Colors[ImGuiCol_WindowBg] = ImColor(18, 20, 23);
+	style.Colors[ImGuiCol_ChildBg] = ImColor(14, 16, 19);
+	style.Colors[ImGuiCol_PopupBg] = ImVec4(0.10f, 0.11f, 0.13f, 1.00f);
+	style.Colors[ImGuiCol_Border] = ImColor(48, 54, 62);
 	style.Colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
 
-	style.Colors[ImGuiCol_FrameBg] = ImColor(75, 75, 75);
-	style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.38f, 0.38f, 0.38f, 1.00f);
-	style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.67f, 0.67f, 0.67f, 0.39f);
+	style.Colors[ImGuiCol_FrameBg] = ImColor(34, 38, 44);
+	style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.18f, 0.28f, 0.36f, 1.00f);
+	style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.11f, 0.36f, 0.52f, 1.00f);
 	style.Colors[ImGuiCol_TitleBg] = ImVec4(0.08f, 0.08f, 0.09f, 1.00f);
 	style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.08f, 0.08f, 0.09f, 1.00f);
 	style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 0.51f);
@@ -380,19 +405,17 @@ void Menu::SetupStyles() {
 	style.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
 	style.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.02f, 0.02f, 0.02f, 0.53f);
 	style.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.31f, 0.31f, 0.31f, 1.00f);
-	style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.41f, 0.41f, 0.41f, 1.00f);
-	style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.51f, 0.51f, 0.51f, 1.00f);
-	style.Colors[ImGuiCol_CheckMark] = ImVec4(0.11f, 0.64f, 0.92f, 1.00f);
+	style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.41f, 0.41f, 0.41f, 1.00f);	style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.51f, 0.51f, 0.51f, 1.00f);
 
-	style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.11f, 0.64f, 0.92f, 1.00f);
-	style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.08f, 0.50f, 0.72f, 1.00f);
-
-	style.Colors[ImGuiCol_Button] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
-	style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.38f, 0.38f, 0.38f, 1.00f);
-	style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.67f, 0.67f, 0.67f, 0.39f);
-	style.Colors[ImGuiCol_Header] = ImVec4(0.22f, 0.22f, 0.22f, 1.00f);
-	style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
-	style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.67f, 0.67f, 0.67f, 0.39f);
+	style.Colors[ImGuiCol_Button] = ImVec4(0.13f, 0.15f, 0.18f, 1.00f);
+	style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.17f, 0.25f, 0.32f, 1.00f);
+	style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.11f, 0.34f, 0.50f, 1.00f);
+	style.Colors[ImGuiCol_Header] = ImVec4(0.13f, 0.20f, 0.26f, 1.00f);
+	style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.17f, 0.28f, 0.36f, 1.00f);
+	style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.11f, 0.36f, 0.52f, 1.00f);
+	style.Colors[ImGuiCol_CheckMark] = ImVec4(0.20f, 0.68f, 0.94f, 1.00f);
+	style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.20f, 0.68f, 0.94f, 1.00f);
+	style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.12f, 0.48f, 0.72f, 1.00f);
 	style.Colors[ImGuiCol_Separator] = style.Colors[ImGuiCol_Border];
 	style.Colors[ImGuiCol_SeparatorHovered] = ImVec4(0.41f, 0.42f, 0.44f, 1.00f);
 	style.Colors[ImGuiCol_SeparatorActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
@@ -418,15 +441,19 @@ void Menu::SetupStyles() {
 	style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
 
 	style.FrameBorderSize = 1.0f;
+	style.ChildBorderSize = 1.0f;
+	style.WindowPadding = ImVec2(12.0f, 12.0f);
+	style.FramePadding = ImVec2(8.0f, 5.0f);
+	style.ItemSpacing = ImVec2(8.0f, 6.0f);
+	style.ItemInnerSpacing = ImVec2(6.0f, 4.0f);
+	style.ScrollbarSize = 12.0f;
 
-	// Window & Frame
-	style.WindowRounding = 12.f;
-	style.ChildRounding = 10.f;
-
-	style.FrameRounding = 5.f;
-	style.PopupRounding = 5.f;
-
-	style.GrabRounding = 3.f;
+	// Keep the surface compact and consistent across Linux and Windows.
+	style.WindowRounding = 6.0f;
+	style.ChildRounding = 4.0f;
+	style.FrameRounding = 3.0f;
+	style.PopupRounding = 4.0f;
+	style.GrabRounding = 2.0f;
 
 	auto& io = ImGui::GetIO();
 

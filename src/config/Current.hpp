@@ -7,6 +7,12 @@ namespace cfg {
 		inline bool team = true;
 
 		inline bool box = true;
+		inline bool box_filled = false;
+		inline float box_fill_alpha = 0.12f;
+		inline float box_thickness = 1.0f;
+		inline float skeleton_thickness = 1.5f;
+		inline float head_tracker_size = 6.0f;
+		inline float tracer_thickness = 1.0f;
 		inline bool armor = true;
 		inline bool health = true;
 		inline bool skeleton = true;
@@ -87,6 +93,15 @@ namespace cfg {
 
 		namespace crosshair {
 			inline bool enabled = false;
+			inline bool sniper_only = true;
+			inline bool center_dot = false;
+			inline bool outline = true;
+			inline float gap = 6.0f;
+			inline float length = 6.0f;
+			inline float thickness = 1.0f;
+			inline float center_dot_size = 1.5f;
+			inline float outline_thickness = 1.0f;
+			inline color_t color{ 1.f, 1.f, 1.f, 1.f };
 		}
 
 		namespace radar {

@@ -36,6 +36,12 @@ bool Config::ReadImpl() {
 
 		// esp
 		cfg::esp::box = data["esp"].value("box", true);
+		cfg::esp::box_filled = data["esp"].value("box_filled", false);
+		cfg::esp::box_fill_alpha = data["esp"].value("box_fill_alpha", 0.12f);
+		cfg::esp::box_thickness = data["esp"].value("box_thickness", 1.0f);
+		cfg::esp::skeleton_thickness = data["esp"].value("skeleton_thickness", 1.5f);
+		cfg::esp::head_tracker_size = data["esp"].value("head_tracker_size", 6.0f);
+		cfg::esp::tracer_thickness = data["esp"].value("tracer_thickness", 1.0f);
 		cfg::esp::team = data["esp"].value("team", true);
 		cfg::esp::armor = data["esp"].value("armor", true);
 		cfg::esp::health = data["esp"].value("health", true);
@@ -106,7 +112,17 @@ bool Config::ReadImpl() {
 		cfg::world::bomb::pos = JsonToVec2(data["world"]["bomb"], "pos", { 10.f, 300.f });
 
 		// crosshair
-		cfg::world::crosshair::enabled = data["world"]["crosshair"].value("enabled", false); 
+		const auto& crosshair = data["world"]["crosshair"];
+		cfg::world::crosshair::enabled = crosshair.value("enabled", false);
+		cfg::world::crosshair::sniper_only = crosshair.value("sniper_only", true);
+		cfg::world::crosshair::center_dot = crosshair.value("center_dot", false);
+		cfg::world::crosshair::outline = crosshair.value("outline", true);
+		cfg::world::crosshair::gap = crosshair.value("gap", 6.0f);
+		cfg::world::crosshair::length = crosshair.value("length", 6.0f);
+		cfg::world::crosshair::thickness = crosshair.value("thickness", 1.0f);
+		cfg::world::crosshair::center_dot_size = crosshair.value("center_dot_size", 1.5f);
+		cfg::world::crosshair::outline_thickness = crosshair.value("outline_thickness", 1.0f);
+		cfg::world::crosshair::color = JsonToColor(crosshair, "color", { 1.f, 1.f, 1.f, 1.f });
 
 		// radar
 		cfg::world::radar::enabled = data["world"]["radar"].value("enabled", true);
@@ -149,6 +165,12 @@ bool Config::WriteImpl() {
 
 	// esp
 	data["esp"]["box"] = cfg::esp::box;
+	data["esp"]["box_filled"] = cfg::esp::box_filled;
+	data["esp"]["box_fill_alpha"] = cfg::esp::box_fill_alpha;
+	data["esp"]["box_thickness"] = cfg::esp::box_thickness;
+	data["esp"]["skeleton_thickness"] = cfg::esp::skeleton_thickness;
+	data["esp"]["head_tracker_size"] = cfg::esp::head_tracker_size;
+	data["esp"]["tracer_thickness"] = cfg::esp::tracer_thickness;
 	data["esp"]["team"] = cfg::esp::team;
 	data["esp"]["armor"] = cfg::esp::armor;
 	data["esp"]["health"] = cfg::esp::health;
@@ -186,6 +208,15 @@ bool Config::WriteImpl() {
 
 	// crosshair
 	data["world"]["crosshair"]["enabled"] = cfg::world::crosshair::enabled;
+	data["world"]["crosshair"]["sniper_only"] = cfg::world::crosshair::sniper_only;
+	data["world"]["crosshair"]["center_dot"] = cfg::world::crosshair::center_dot;
+	data["world"]["crosshair"]["outline"] = cfg::world::crosshair::outline;
+	data["world"]["crosshair"]["gap"] = cfg::world::crosshair::gap;
+	data["world"]["crosshair"]["length"] = cfg::world::crosshair::length;
+	data["world"]["crosshair"]["thickness"] = cfg::world::crosshair::thickness;
+	data["world"]["crosshair"]["center_dot_size"] = cfg::world::crosshair::center_dot_size;
+	data["world"]["crosshair"]["outline_thickness"] = cfg::world::crosshair::outline_thickness;
+	ColorToJson(data["world"]["crosshair"], "color", cfg::world::crosshair::color);
 
 	// radar
 	data["world"]["radar"]["enabled"] = cfg::world::radar::enabled;

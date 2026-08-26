@@ -112,10 +112,19 @@ void Esp::RenderPlayer(Player player, bool mate) {
 	if (cfg::esp::box) {
 		auto color = mate ? cfg::esp::colors::box_team : cfg::esp::colors::box_enemy;
 
+		if (cfg::esp::box_filled) {
+			auto fill_color = color;
+			fill_color.a = std::clamp(cfg::esp::box_fill_alpha, 0.0f, 1.0f);
+			d->AddRectFilled(bounds.first, bounds.second, ImColor(fill_color));
+		}
+
 		d->AddRect(
 			bounds.first,
 			bounds.second,
-			ImColor(color)
+			ImColor(color),
+			0.0f,
+			ImDrawFlags_None,
+			std::clamp(cfg::esp::box_thickness, 1.0f, 4.0f)
 		);
 	}
 
@@ -154,13 +163,13 @@ void Esp::RenderPlayerBones(Player player, bool mate) {
 			scb1,
 			scb2,
 			ImColor(color),
-			1.5f
+			std::clamp(cfg::esp::skeleton_thickness, 1.0f, 4.0f)
 		);
 	}
 }
 
 void Esp::RenderPlayerTracker(Player player, std::pair<Vec2_t, Vec2_t> bounds, bool mate) {
-	if (player.bone_list.empty())
+	if (player.bone_list.size() <= bone_index::head)
 		return;
 
 	auto head_bone = player.bone_list[bone_index::head];
@@ -172,11 +181,12 @@ void Esp::RenderPlayerTracker(Player player, std::pair<Vec2_t, Vec2_t> bounds, b
 	auto width = bounds.second.x - bounds.first.x;
 	auto color = mate ? cfg::esp::colors::tracker_team : cfg::esp::colors::tracker_enemy;
 
-	const float radius = width / 6;
+	const float tracker_size = std::clamp(cfg::esp::head_tracker_size, 2.0f, 14.0f);
+	const float radius = std::max(2.0f, width / 6.0f * (tracker_size / 6.0f));
 	if (cfg::esp::head_tracker_filled)
 		d->AddCircleFilled(head, radius, ImColor(color), 15);
 	else
-		d->AddCircle(head, radius, ImColor(color), 15);
+		d->AddCircle(head, radius, ImColor(color), 15, 1.0f);
 }
 
 void Esp::RenderPlayerBars(Player player, std::pair<Vec2_t, Vec2_t> bounds) {
@@ -460,40 +470,64 @@ void Esp::RenderBombBox(Bomb bomb) {
 
 void Esp::RenderCrosshair(Player local)
 {
-	if (!cfg::world::crosshair::enabled)
-		return;
-
-	if (local.scoped)
+	if (!cfg::world::crosshair::enabled || local.scoped)
 		return;
 
 	auto weapon = local.weapon;
-
 	if (weapon.item_index == -1)
 		return;
 
-	static std::vector<WeaponIds> valid_weapons = { weapon_ssg08, weapon_awp, weapon_g3sg1, weapon_scar20 };
+	static const std::vector<WeaponIds> valid_weapons = {
+		weapon_ssg08, weapon_awp, weapon_g3sg1, weapon_scar20
+	};
 
-	if (std::find(valid_weapons.begin(), valid_weapons.end(), weapon.item_index) == valid_weapons.end())
+	if (cfg::world::crosshair::sniper_only &&
+		std::find(valid_weapons.begin(), valid_weapons.end(), weapon.item_index) == valid_weapons.end())
 		return;
 
-	ImVec2 center(
+	const ImVec2 center(
 		floorf(io.DisplaySize.x * 0.5f),
 		floorf(io.DisplaySize.y * 0.5f));
+	const float gap = std::max(0.0f, cfg::world::crosshair::gap);
+	const float length = std::max(0.0f, cfg::world::crosshair::length);
+	const float thickness = std::max(1.0f, cfg::world::crosshair::thickness);
+	const ImColor color(cfg::world::crosshair::color);
 
-	constexpr float size = 6.f;
-	constexpr float thickness = 1.0f;
+	const auto draw_line = [&](ImVec2 start, ImVec2 end) {
+		if (cfg::world::crosshair::outline) {
+			d->AddLine(
+				start,
+				end,
+				IM_COL32(0, 0, 0, 220),
+				thickness + 2.0f * std::max(0.0f, cfg::world::crosshair::outline_thickness)
+			);
+		}
+		d->AddLine(start, end, color, thickness);
+	};
 
-	d->AddLine(
-		ImVec2(center.x - size, center.y),
-		ImVec2(center.x + size + 1, center.y),
-		IM_COL32(255, 255, 255, 255),
+	draw_line(
+		ImVec2(center.x - gap - length, center.y),
+		ImVec2(center.x - gap, center.y)
+	);
+	draw_line(
+		ImVec2(center.x + gap, center.y),
+		ImVec2(center.x + gap + length, center.y)
+	);
+	draw_line(
+		ImVec2(center.x, center.y - gap - length),
+		ImVec2(center.x, center.y - gap)
+	);
+	draw_line(
+		ImVec2(center.x, center.y + gap),
+		ImVec2(center.x, center.y + gap + length)
+	);
 
-		thickness);
-	d->AddLine(
-		ImVec2(center.x, center.y - size),
-		ImVec2(center.x, center.y + size + 1),
-		IM_COL32(255, 255, 255, 255),
-		thickness);
+	if (cfg::world::crosshair::center_dot) {
+		const float dot_size = std::max(0.5f, cfg::world::crosshair::center_dot_size);
+		if (cfg::world::crosshair::outline)
+			d->AddCircleFilled(center, dot_size + cfg::world::crosshair::outline_thickness, IM_COL32(0, 0, 0, 220));
+		d->AddCircleFilled(center, dot_size, color, 12);
+	}
 }
 
 void Esp::RenderPlayerTracers(Player source, Player player, bool mate) {
@@ -542,6 +576,6 @@ void Esp::RenderPlayerTracers(Player source, Player player, bool mate) {
 		Vec2_t(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f),
 		screenPos,
 		ImColor(color),
-		1.0f
+		std::clamp(cfg::esp::tracer_thickness, 1.0f, 4.0f)
 	);
 }

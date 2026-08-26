@@ -41,7 +41,9 @@ bool Overlays::InitImpl() {
 	io.Fonts->AddFontFromMemoryTTF(weapon_icon_font, weapon_icon_font_len, 12.f, &merge_icon_cfg, icon_ranges);
 
     // Pre allocate buffer
-    this->vel_buffer.resize(static_cast<size_t>(cfg::world::velocity::sample_rate * cfg::world::velocity::sample_length));
+    const int rate = std::clamp(cfg::world::velocity::sample_rate, 1, 100);
+    const float length = std::clamp(cfg::world::velocity::sample_length, 1.0f, 20.0f);
+    this->vel_buffer.resize(static_cast<size_t>(rate * length));
 
     return this->font && this->font_alt && this->font_icons;
 }
@@ -297,8 +299,8 @@ void Overlays::RenderSpeedChart() {
     auto& pos = cfg::world::velocity::pos;
     auto& size = cfg::world::velocity::size;
 
-    int rate = cfg::world::velocity::sample_rate;
-    float length = cfg::world::velocity::sample_length;
+    int rate = std::clamp(cfg::world::velocity::sample_rate, 1, 100);
+    float length = std::clamp(cfg::world::velocity::sample_length, 1.0f, 20.0f);
 
     static int prev_rate = rate;
     static float prev_length = length;
@@ -330,11 +332,13 @@ void Overlays::RenderSpeedChart() {
     }
 
     // Cache menu values and resize when changed
-    if (prev_rate != rate || prev_length != length) {
+    if (prev_rate != rate || prev_length != length || vel_buffer.empty()) {
         prev_rate = rate;
         prev_length = length;
 
-        vel_buffer.resize(static_cast<size_t>(rate * length));
+        vel_buffer.assign(static_cast<size_t>(std::max(1.0f, rate * length)), 0);
+        vel_index = 0;
+        vel_accumulator = 0.0f;
     }
 
     Vec2_t speed_2d(local.vel.x, local.vel.y);
@@ -346,7 +350,7 @@ void Overlays::RenderSpeedChart() {
     std::vector<ImVec2> points;
     points.reserve(buff_size);
 
-    float sample_interval = 1.0f / rate;
+    float sample_interval = 1.0f / static_cast<float>(rate);
 
     while (vel_accumulator >= sample_interval)
     {
@@ -360,7 +364,7 @@ void Overlays::RenderSpeedChart() {
         max_speed = std::max(max_speed, v);
 
     for (size_t i = 0; i < buff_size; ++i) {
-        float t = i / float(buff_size - 1);
+        float t = buff_size > 1 ? i / float(buff_size - 1) : 0.0f;
 
         float x = left + t * width;
 
