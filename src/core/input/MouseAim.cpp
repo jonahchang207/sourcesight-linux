@@ -408,8 +408,10 @@ void MouseAim::Update() {
         LOGF(INFO, "[aim] toggled {}", cfg::aim::enabled ? "ON" : "OFF");
     }
 
-    // Panic key (F9): instantly disable all cheats.
-    if (cfg::settings::panic_key && ImGui::IsKeyPressed(ImGuiKey_F9)) {
+    // Panic key: instantly disable all cheats.
+    // The flag is set by the render thread (which owns ImGui).
+    if (cfg::settings::panic_key_pressed) {
+        cfg::settings::panic_key_pressed = false;
         cfg::aim::enabled = false;
         cfg::esp::spotted_only = false;
         cfg::esp::headshot_line = false;

@@ -137,6 +137,10 @@ bool Esp::InitImpl() {
 }
 
 void Esp::RenderImpl() {
+	// Panic key detection (must be on the render thread where ImGui is safe).
+	if (cfg::settings::panic_key && ImGui::IsKeyPressed(ImGuiKey_F9))
+		cfg::settings::panic_key_pressed = true;
+
 	if (!cfg::enabled)
 		return;
 

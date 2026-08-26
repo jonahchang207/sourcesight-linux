@@ -138,7 +138,8 @@ namespace cfg {
 		inline bool streamproof = true;    // On by default for safety
 		inline bool vsync = false;
 		inline bool free_cpu = true;
-		inline bool panic_key = true;      // Press End to disable everything
+		inline bool panic_key = true;      // Press F9 to disable everything
+		inline bool panic_key_pressed = false; // Set by render thread, read by engine
 	}
 
 	namespace macro {
