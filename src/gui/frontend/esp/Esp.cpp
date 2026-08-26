@@ -739,15 +739,7 @@ void Esp::RenderBulletTracers(Player player, const std::vector<Player>& players,
 }
 
 void Esp::RenderAimFov() {
-	// Scale from the aim controller's monitor space into overlay pixels, in
-	// case the overlay surface is not exactly the monitor size.
-	float screen_w = io.DisplaySize.x;
-	float screen_h = io.DisplaySize.y;
-	MouseAim::ScreenSize(screen_w, screen_h);
-	const float sx = io.DisplaySize.x / std::max(1.0f, screen_w);
-	const float sy = io.DisplaySize.y / std::max(1.0f, screen_h);
-
-	// Status label is always shown so it is obvious whether the aim is live.
+	// Status label: always visible so the user knows if aim is live.
 	const char* status = cfg::aim::enabled ? "AIM ON" : "AIM OFF";
 	const ImU32 status_col = cfg::aim::enabled
 		? IM_COL32(110, 255, 150, 235) : IM_COL32(150, 160, 155, 150);
@@ -755,4 +747,35 @@ void Esp::RenderAimFov() {
 	d->AddText(ImVec2(io.DisplaySize.x * 0.5f - status_size.x * 0.5f, 20.0f),
 			status_col, status);
 
+	// FOV ring: only drawn when aim is enabled.  Shows the acquisition
+	// zone around the crosshair where enemies can be locked onto.
+	if (!cfg::aim::enabled)
+		return;
+
+	// Scale from monitor space into overlay pixels.
+	float screen_w = io.DisplaySize.x;
+	float screen_h = io.DisplaySize.y;
+	MouseAim::ScreenSize(screen_w, screen_h);
+	const float sx = io.DisplaySize.x / std::max(1.0f, screen_w);
+	const float sy = io.DisplaySize.y / std::max(1.0f, screen_h);
+
+	// Centre of the ring: crosshair in game mode, else the tracked cursor.
+	float cx = io.DisplaySize.x * 0.5f;
+	float cy = io.DisplaySize.y * 0.5f;
+	if (!cfg::aim::game_mode) {
+		float mx, my;
+		if (MouseAim::TrackedCursor(mx, my)) {
+			cx = mx * sx;
+			cy = my * sy;
+		}
+	}
+
+	const float radius = cfg::aim::fov_radius * std::min(sx, sy);
+	if (radius < 1.0f)
+		return;
+
+	// Subtle sapphire ring — thin and semi-transparent so it doesn't
+	// distract, but clearly marks the detection boundary.
+	const ImU32 ring = IM_COL32(80, 140, 230, 90);
+	d->AddCircle(ImVec2(cx, cy), radius, ring, 64, 1.5f);
 }
