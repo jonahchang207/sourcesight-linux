@@ -60,14 +60,13 @@ bool Dumper::InitImpl() {
     offsets::plantedC4 = temp - client.base;
     LOGF(VERBOSE, "Found 'weaponC4' offset at 0x{:X}", offsets::plantedC4);
 
-    // C4 carrier pointer
+    // C4 carrier pointer (no Linux pattern available yet, so this is best-effort)
     if (!(temp = Scan(offsets::signatures::weaponC4, client))) {
-        LOGF(FATAL, "Could not find offset for 'weaponC4 carrier'");
-        return false;
+        LOGF(WARNING, "Could not find offset for 'weaponC4 carrier', disabling C4 carrier ESP");
+    } else {
+        offsets::weaponC4 = temp - client.base;
+        LOGF(VERBOSE, "Found 'weaponC4 carrier' offset at 0x{:X}", offsets::weaponC4);
     }
-
-    offsets::weaponC4 = temp - client.base;
-    LOGF(VERBOSE, "Found 'weaponC4 carrier' offset at 0x{:X}", offsets::weaponC4);
 
 #if 0
     // Local Player Pawn (tbh idk how to read it :1)
@@ -106,7 +105,7 @@ bool Dumper::InitImpl() {
     return true;
 }
 
-DWORD64 Dumper::Scan(const std::string sig, ProcessModule module) {
+DWORD64 Dumper::Scan(const offsets::signatures::Signature& sig, ProcessModule module) {
     auto process = Engine::GetProcess();
 
     if (!process)
@@ -116,14 +115,14 @@ DWORD64 Dumper::Scan(const std::string sig, ProcessModule module) {
     DWORD64 address = 0;
     std::vector<DWORD64> list;
 
-    if (!module.base || !module.size)
+    if (!module.base || !module.size || !sig.bytes || !sig.bytes[0])
         return 0;
 
 #ifdef _WIN32
-    list = ScanMemory(sig, module.base, module.base + module.size);
+    list = ScanMemory(sig.bytes, module.base, module.base + module.size);
 #else
     std::vector<uint8_t> signature;
-    for (const auto byte : StrSigToArray(sig))
+    for (const auto byte : StrSigToArray(sig.bytes))
         signature.push_back(byte == 256 ? 0 : static_cast<uint8_t>(byte));
 
     const auto match = process->FindSignature(module, std::move(signature));
@@ -134,10 +133,10 @@ DWORD64 Dumper::Scan(const std::string sig, ProcessModule module) {
     if (!list.size())
         return 0;
 
-    if (!process->read_raw(list.at(0) + 3, &offsets, sizeof(DWORD)))
+    if (!process->read_raw(list.at(0) + sig.disp_offset, &offsets, sizeof(DWORD)))
         return 0;
 
-    address = list.at(0) + offsets + 7;
+    address = list.at(0) + offsets + sig.instr_len;
     return address;
 }
 

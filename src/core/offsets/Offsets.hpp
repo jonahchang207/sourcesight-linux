@@ -1,6 +1,6 @@
 namespace offsets
 {
-	// client.dll
+	// libclient.so
 	inline DWORD entityList;
 	inline DWORD viewMatrix;
 	inline DWORD localPlayerController;
@@ -8,49 +8,49 @@ namespace offsets
 	inline DWORD plantedC4;
 	inline DWORD weaponC4;
 
-	// engine2.dll
+	// libengine2.so
 	inline DWORD buildNumber;
 
 	namespace controller {
-		constexpr std::ptrdiff_t m_iPing = 0x830; // uint32
-		constexpr std::ptrdiff_t m_hPawn = 0x6BC; // CHandle<C_BasePlayerPawn>
-		constexpr std::ptrdiff_t m_steamID = 0x780; // uint64
-		constexpr std::ptrdiff_t m_iszPlayerName = 0x6F4; // char[128]
-		constexpr std::ptrdiff_t m_bIsLocalPlayerController = 0x788; // bool
-		constexpr std::ptrdiff_t m_pInGameMoneyServices = 0x810; // CCSPlayerController_InGameMoneyServices*
+		constexpr std::ptrdiff_t m_iPing = 0x9B0; // uint32
+		constexpr std::ptrdiff_t m_hPawn = 0x83C; // CHandle<C_BasePlayerPawn>
+		constexpr std::ptrdiff_t m_steamID = 0x900; // uint64
+		constexpr std::ptrdiff_t m_iszPlayerName = 0x874; // char[128]
+		constexpr std::ptrdiff_t m_bIsLocalPlayerController = 0x908; // bool
+		constexpr std::ptrdiff_t m_pInGameMoneyServices = 0x990; // CCSPlayerController_InGameMoneyServices*
 		constexpr std::ptrdiff_t m_iAccount = 0x40; // int32 - CCSPlayerController_InGameMoneyServices 
 	}
 
 	namespace pawn {
-		constexpr std::ptrdiff_t m_vOldOrigin = 0x13B8; // Vector
-		constexpr std::ptrdiff_t m_iHealth = 0x34C; // int32
-		constexpr std::ptrdiff_t m_iTeamNum = 0x3E7; // uint8
-		constexpr std::ptrdiff_t m_bIsScoped = 0x1C70; // bool
-		constexpr std::ptrdiff_t m_ArmorValue = 0x1C9C; // int32
-		constexpr std::ptrdiff_t m_bIsDefusing = 0x1C72; // bool
-		constexpr std::ptrdiff_t m_vecAbsVelocity = 0x3F8; // Vector
+		constexpr std::ptrdiff_t m_vOldOrigin = 0x1340; // Vector
+		constexpr std::ptrdiff_t m_iHealth = 0x4BC; // int32
+		constexpr std::ptrdiff_t m_iTeamNum = 0x557; // uint8
+		constexpr std::ptrdiff_t m_bIsScoped = 0x2B00; // bool
+		constexpr std::ptrdiff_t m_ArmorValue = 0x2B2C; // int32
+		constexpr std::ptrdiff_t m_bIsDefusing = 0x2B02; // bool
+		constexpr std::ptrdiff_t m_vecAbsVelocity = 0x568; // Vector
 
-		constexpr std::ptrdiff_t m_pGameSceneNode = 0x330; // CGameSceneNode*
+		constexpr std::ptrdiff_t m_pGameSceneNode = 0x4A0; // CGameSceneNode*
 		
-		constexpr std::ptrdiff_t m_entitySpottedState = 0x11B0; // EntitySpottedState_t
+		constexpr std::ptrdiff_t m_entitySpottedState = 0x2AE8; // EntitySpottedState_t
 		constexpr std::ptrdiff_t m_bSpottedByMask = 0xC; // uint32[2] - EntitySpottedState_t
 		
-		constexpr std::ptrdiff_t m_flFlashOverlayAlpha = 0x141C; // float32 - C_CSPlayerPawnBase 
+		constexpr std::ptrdiff_t m_flFlashOverlayAlpha = 0x13A4; // float32 - C_CSPlayerPawnBase 
 		
-		constexpr std::ptrdiff_t m_pWeaponServices = 0x1208; // CPlayer_WeaponServices*
+		constexpr std::ptrdiff_t m_pWeaponServices = 0x1190; // CPlayer_WeaponServices*
 		constexpr std::ptrdiff_t m_hActiveWeapon = 0x60; // CHandle<C_BasePlayerWeapon> - CPlayer_WeaponServices
-		constexpr std::ptrdiff_t m_AttributeManager = 0x11A8; // C_AttributeContainer - C_EconEntity (parent of C_BasePlayerWeapon)
+		constexpr std::ptrdiff_t m_AttributeManager = 0x1130; // C_AttributeContainer - C_EconEntity (parent of C_BasePlayerWeapon)
 		constexpr std::ptrdiff_t m_Item = 0x50; // C_EconItemView - C_AttributeContainer
-		constexpr std::ptrdiff_t m_iItemDefinitionIndex = 0x1BA; // uint16 - C_EconItemView
-		constexpr std::ptrdiff_t m_iClip1 = 0x1700; // int32 - C_BasePlayerWeapon
-		constexpr std::ptrdiff_t m_bInReload = 0x1814; // bool - C_CSWeaponBase
-		constexpr std::ptrdiff_t m_pObserverServices = 0x1220; // CPlayer_ObserverServices*
+		constexpr std::ptrdiff_t m_iItemDefinitionIndex = 0x10C2; // uint16 - C_EconItemView
+		constexpr std::ptrdiff_t m_iClip1 = 0x2590; // int32 - C_BasePlayerWeapon
+		constexpr std::ptrdiff_t m_bInReload = 0x26A4; // bool - C_CSWeaponBase
+		constexpr std::ptrdiff_t m_pObserverServices = 0x11A8; // CPlayer_ObserverServices*
 	}
 
 	namespace bomb {
 		constexpr std::ptrdiff_t m_isPlanted = 0x8; // unk
-		constexpr std::ptrdiff_t m_bC4Activated = 0x11E8; // bool
-		constexpr std::ptrdiff_t m_nBombSite = 0x11A4; // int32
+		constexpr std::ptrdiff_t m_bC4Activated = 0x1170; // bool
+		constexpr std::ptrdiff_t m_nBombSite = 0x112C; // int32
 
 		constexpr std::ptrdiff_t m_vecAbsOrigin = 0xC8; // VectorWS - CGameSceneNode 
 	}
@@ -72,34 +72,28 @@ namespace offsets
 
 	namespace signatures
 	{
-		const std::string viewMatrix = "48 8D 0D ?? ?? ?? ?? 48 C1 E0 06";
-		const std::string globalVars = "48 89 15 ?? ?? ?? ?? 48 89 42";
-		const std::string entityList = "48 8B 0D ?? ?? ?? ?? 48 89 7C 24 ?? 8B FA C1 EB";
-		const std::string localPlayerController = "48 8B 05 ?? ?? ?? ?? 41 89 BE";
-		const std::string plantedC4 = "48 8B 1D ?? ?? ?? ?? 45 32 F6";
-		const std::string weaponC4 =
-			"48 89 05 ?? ?? ?? ?? "
-			"F7 C1 ?? ?? ?? ?? "
-			"74 ?? "
-			"81 E1 ?? ?? ?? ?? "
-			"89 0D ?? ?? ?? ?? "
-			"8B 05 ?? ?? ?? ?? "
-			"89 1D ?? ?? ?? ?? "
-			"EB ?? "
-			"48 8B 15 ?? ?? ?? ?? "
-			"48 8B 5C 24 ?? "
-			"FF C0 "
-			"89 05 ?? ?? ?? ?? "
-			"48 8B C6 48 89 34 EA 80 BE";
+		// A pattern plus where its 4-byte RIP displacement lives. The dumper
+		// resolves the target as: match + *(match + disp_offset) + instr_len.
+		struct Signature
+		{
+			const char* bytes;       // pattern string, '??' are wildcards
+			int8_t disp_offset = 3;  // byte offset of the disp32 from the pattern start
+			int8_t instr_len = 7;    // distance from the pattern start to the next instruction
+		};
 
-#if 0
-		const std::string localPlayerPawn = "48 8D 05 ?? ?? ?? ?? C3 CC CC CC CC CC CC CC CC 48 83 EC ?? 8B 0D";
+		// Linux patterns, taken from the a2x/cs2-dumper linux branch (config.json) and
+		// verified against the installed CS2 Linux build (Steam buildid 24934554, 2026-08-25).
+		inline const Signature viewMatrix = { "C6 83 ?? ?? 00 00 01 4C 8D 05", 10, 14 };
+		inline const Signature globalVars = { "48 8D 05 ?? ?? ?? ?? 48 8B 00 8B 40 44 F3", 3, 7 };
+		inline const Signature entityList = { "48 8B 3D ?? ?? ?? ?? 48 85 FF 0F 94 C0 83 FE FE", 3, 7 };
+		inline const Signature localPlayerController = { "48 83 3D ?? ?? ?? ?? 00 0F 95 C0 C3", 3, 8 };
+		inline const Signature plantedC4 = { "48 8D 35 ?? ?? ?? ?? 66 0F EF C0 C6 05 ?? ?? ?? ?? 01 48 8D 3D", 3, 14 };
 
-		const std::string csgoInput = "48 89 05 ?? ?? ?? ?? 0F 57 C0 0F 11 05";
-		const std::string viewAngles = "F2 42 0F 10 84 28 ?? ?? ?? ??";
-#endif
+		// The C4-carrier global has no known Linux pattern yet (a2x/cs2-dumper does not
+		// dump it for Linux). An empty pattern makes the scan fail gracefully and the
+		// C4-carrier ESP is skipped (see Bomb.cpp). TODO: find it with a live game.
+		inline const Signature weaponC4 = { "" };
 
-		const std::string buildNumber = "89 05 ?? ?? ?? ?? 48 8d 0d ?? ?? ?? ?? ff 15 ?? ?? ?? ?? 48 8b 0d";
-
+		inline const Signature buildNumber = { "89 15 ?? ?? ?? ?? 48 83 C4 08 5B 5D C3", 2, 6 };
 	}
 }

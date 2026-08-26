@@ -14,6 +14,19 @@
 
 #include <external/exception.hpp>
 
+#ifndef _WIN32
+#include <csignal>
+#include <unistd.h>
+
+// Die exactly like the default handler would, so the process is never left
+// running after its terminal closes (SIGHUP) or is interrupted (SIGINT/SIGTERM).
+static void HandleTerminationSignal(int signum)
+{
+    std::signal(signum, SIG_DFL);
+    std::raise(signum);
+}
+#endif
+
 int main()
 {
     c_exception_handler::setup();
@@ -21,6 +34,18 @@ int main()
     LogHelper::Init();
 
     LOGF(INFO, "Compiled {}, Welcome to SourceSight Linux!", __TIMESTAMP__);
+
+#ifndef _WIN32
+    // Print the PID so the process is easy to identify and kill (e.g. kill <pid>).
+    LOGF(INFO, "PID {}", static_cast<long>(::getpid()));
+
+    struct sigaction action {};
+    action.sa_handler = HandleTerminationSignal;
+    sigemptyset(&action.sa_mask);
+    sigaction(SIGHUP, &action, nullptr);
+    sigaction(SIGINT, &action, nullptr);
+    sigaction(SIGTERM, &action, nullptr);
+#endif
 
 #ifdef _WIN32
     // Needs to be ran as ADMINISTRATOR

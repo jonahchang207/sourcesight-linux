@@ -14,10 +14,13 @@ bool Bomb::Update() {
 
 	// Resolve the C4 carrier via the global weaponC4 pointer
 	// client.base + weaponC4 -> ptr to C4 entity -> m_hOwnerEntity (0x520) = pawn handle
-	auto c4_ptr = p->read<uintptr_t>(client.base + offsets::weaponC4);
-	if (c4_ptr) {
-		if (auto e = p->read<uintptr_t>(c4_ptr))
-			carrier = p->read<std::uint32_t>(e + 0x520 /* Magic Offset? */);
+	// Only available once a Linux weaponC4 offset is found (see Offsets.hpp).
+	if (offsets::weaponC4) {
+		auto c4_ptr = p->read<uintptr_t>(client.base + offsets::weaponC4);
+		if (c4_ptr) {
+			if (auto e = p->read<uintptr_t>(c4_ptr))
+				carrier = p->read<std::uint32_t>(e + 0x520 /* Magic Offset? */);
+		}
 	}
 
 	this->address = p->read<uintptr_t>(client.base + offsets::plantedC4);
