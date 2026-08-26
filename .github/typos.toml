@@ -5,3 +5,7 @@ extend-exclude = [
   "src/external/**",
   "**/x64/**",
 ]
+
+[default.extend-identifiers]
+# CS2 resource identifiers use "variante" to mean "variant e".
+variante = "variante"
