@@ -30,7 +30,7 @@ list(APPEND APP_SOURCES
     "src/external/AsyncLogger/src/LogStream.cpp")
 
 add_executable(sourcesight ${APP_SOURCES})
-target_compile_definitions(sourcesight PRIVATE _GNU_SOURCE GLFW_EXPOSE_NATIVE_X11)
+target_compile_definitions(sourcesight PRIVATE _GNU_SOURCE)
 target_compile_options(sourcesight PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(sourcesight PRIVATE src src/external src/external/imgui
     src/external/json/include
