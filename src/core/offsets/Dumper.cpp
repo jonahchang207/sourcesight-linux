@@ -209,17 +209,7 @@ std::vector<DWORD64> Dumper::ScanMemory(const std::string& sig, DWORD64 start, D
             if (result.size() >= number) {
                 delete[] buffer;
 	            return result;
-	}
-#else
-	while (start < end)
-	{
-		const auto size = static_cast<DWORD>(std::min<DWORD64>(MAX_BLOCK_SIZE, end - start));
-		ScanBlock(buffer, next, signature, start, size, result);
-		if (result.size() >= number) break;
-		start += size;
-	}
-#endif
-
+	        }
             ScanBlock(buffer, next, signature, start + (MAX_BLOCK_SIZE * searches), MAX_BLOCK_SIZE, result);
 
             size -= MAX_BLOCK_SIZE;
@@ -233,6 +223,15 @@ std::vector<DWORD64> Dumper::ScanMemory(const std::string& sig, DWORD64 start, D
         if (result.size() >= number || end != 0 && start > end)
             break;
     }
+#else
+	while (start < end)
+	{
+		const auto size = static_cast<DWORD>(std::min<DWORD64>(MAX_BLOCK_SIZE, end - start));
+		ScanBlock(buffer, next, signature, start, size, result);
+		if (result.size() >= static_cast<size_t>(number)) break;
+		start += size;
+	}
+#endif
 
 	delete[] buffer;
 	return result;
