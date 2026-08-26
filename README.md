@@ -9,7 +9,7 @@ External ESP overlay for Counter-Strike 2, built for **Omarchy Linux** (Hyprland
 SourceSight targets Omarchy's Hyprland session through GLFW's X11 backend (XWayland), OpenGL 3, and Linux `process_vm_readv`. It does not inject a library or write into the game process.
 
 ```bash
-git clone --recursive https://github.com/jonahchang207/sourcesight-linux.git
+git clone --recursive -b omarchy-port https://github.com/jonahchang207/sourcesight-linux.git
 cd sourcesight-linux
 chmod +x scripts/install-omarchy.sh
 ./scripts/install-omarchy.sh
@@ -41,7 +41,7 @@ Use CS2's fullscreen-windowed mode. Press `Insert` or right `Shift` to toggle th
 ### Linux (Omarchy)
 
 ```bash
-git clone --recursive https://github.com/jonahchang207/sourcesight-linux
+git clone --recursive -b omarchy-port https://github.com/jonahchang207/sourcesight-linux
 cd sourcesight-linux
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
@@ -49,7 +49,7 @@ cmake --build build --parallel
 
 ### Windows
 
-1. Clone the repository with submodules: `git clone --recursive https://github.com/jonahchang207/sourcesight-linux`
+1. Clone the repository with submodules: `git clone --recursive -b omarchy-port https://github.com/jonahchang207/sourcesight-linux`
    - If you cloned before submodules were added, run `git submodule update --init --recursive`
 2. Build using **Visual Studio 2022** (or later): Build **`x64 - Release`**
 3. Locate your binary in `<arch>/<configuration>`, e.g. `x64/Release`.
