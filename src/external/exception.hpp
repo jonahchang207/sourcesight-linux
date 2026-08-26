@@ -29,6 +29,7 @@ public:
 		output_file << output << std::endl;
 	}
 
+#ifdef _WIN32
 	static long __stdcall handler(EXCEPTION_POINTERS* info)
 	{
 		const auto code = info->ExceptionRecord->ExceptionCode;
@@ -47,15 +48,20 @@ public:
 
 		return 0;
 	}
+#endif
 
 	static bool setup()
 	{
+#ifdef _WIN32
 		const auto handle = AddVectoredExceptionHandler(false, handler);
 		if (!handle)
 		{
 			LOGF(FATAL, "Failed to add vectored exception handler");
 			return false;
 		}
+#else
+		// Linux crash diagnostics are handled by the shell/core-dump service.
+#endif
 
 		return true;
 	}

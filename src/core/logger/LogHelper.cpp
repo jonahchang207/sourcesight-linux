@@ -17,15 +17,18 @@ void LogHelper::Destroy()
 }
 
 void LogHelper::Free() {
-    if (HWND console = GetConsoleWindow()) {
+#ifdef _WIN32
+	if (HWND console = GetConsoleWindow()) {
         FreeConsole();
         PostMessage(console, WM_CLOSE, 0, 0);
-    }
+	}
+#endif
 }
 
 bool LogHelper::InitImpl() {
     Logger::Init();
 
+#ifdef _WIN32
     if (auto handle = GetStdHandle(STD_OUTPUT_HANDLE); handle != nullptr)
     {
         SetConsoleTitleA(__DATE__);
@@ -42,6 +45,7 @@ bool LogHelper::InitImpl() {
     }
 
     m_ConsoleOut.open("CONOUT$", std::ios_base::out | std::ios_base::app);
+#endif
 
     Logger::AddSink([this](LogMessagePtr msg) {
 #ifndef _DEBUG
@@ -50,8 +54,13 @@ bool LogHelper::InitImpl() {
 #endif
         std::string formatted = this->FormatConsole(msg);
 
+#ifdef _WIN32
         m_ConsoleOut << formatted;
         m_ConsoleOut.flush();
+#else
+        std::cout << formatted;
+        std::cout.flush();
+#endif
     });
 
     return true;

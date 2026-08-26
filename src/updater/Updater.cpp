@@ -64,6 +64,7 @@ bool Updater::ProcessImpl() {
 	}
 
 	if (status.unsafe) {
+#ifdef _WIN32
 		auto result = MessageBox(
 			NULL, 
 			"This application has been marked as \"Unsafe\" to use, its not recommended to proceed.\nDo you want to continue?"
@@ -76,12 +77,17 @@ bool Updater::ProcessImpl() {
 			LOGF(VERBOSE, "User has opted to close application after it was warned about it been unsafe");
 			return false;
 		}
+#else
+		LOGF(FATAL, "This release is marked unsafe; refusing to continue on Linux");
+		return false;
+#endif
 		
 		LOGF(WARNING, "User has opted to continue, even after been warned that the application is not safe to use");
 		return true;
 	}
 	
 	if (current_version < status.version_minimum) {
+#ifdef _WIN32
 		auto result = MessageBox(
 			NULL,
 			"This application is \"out-of-date\", and might not work as expected.\nDo you want to continue?"
@@ -94,6 +100,10 @@ bool Updater::ProcessImpl() {
 			LOGF(VERBOSE, "User has opted to close application after it was warned about it been \"out-of-date\"");
 			return false;
 		}
+#else
+		LOGF(FATAL, "This release is below the minimum supported version; refusing to continue on Linux");
+		return false;
+#endif
 
 		LOGF(WARNING, "User has opted to continue, even after been warned that the application is \"out-of-date\"");
 		return true;

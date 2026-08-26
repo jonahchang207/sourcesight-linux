@@ -3,12 +3,17 @@
 
 #include <vector>
 #include <math.h>
-#include <Windows.h>
-#include <TlHelp32.h>
 #include <string>
 #include <iostream>
-#include <Psapi.h> 
+#ifdef _WIN32
+#include <Windows.h>
+#include <TlHelp32.h>
+#include <Psapi.h>
+#else
+#include <sys/types.h>
+#endif
 
+#ifdef _WIN32
 typedef NTSTATUS(WINAPI* pNtReadVirtualMemory)(HANDLE ProcessHandle, PVOID BaseAddress, PVOID Buffer, ULONG NumberOfBytesToRead, PULONG NumberOfBytesRead);
 typedef NTSTATUS(WINAPI* pNtWriteVirtualMemory)(HANDLE ProcessHandle, PVOID BaseAddress, PVOID Buffer, ULONG NumberOfBytesToWrite, PULONG NumberOfBytesWritten);
 
@@ -23,6 +28,7 @@ public:
 	pNtReadVirtualMemory pfnNtReadVirtualMemory;
 	pNtWriteVirtualMemory pfnNtWriteVirtualMemory;
 };
+#endif
 
 struct ProcessModule
 {
@@ -32,9 +38,14 @@ struct ProcessModule
 class pProcess
 {
 public:
-	DWORD		  pid_; // process id
-	HANDLE		  handle_; // handle to process
-	HWND		  hwnd_; // window handle
+#ifdef _WIN32
+	DWORD pid_{};
+	HANDLE handle_{};
+	HWND hwnd_{};
+#else
+	pid_t pid_{};
+	int handle_{}; // Non-zero while attached; reads use process_vm_readv.
+#endif
 	ProcessModule base_client_;
 
 public:
@@ -63,35 +74,45 @@ public:
 
 	bool read_raw(uintptr_t address, void* buffer, size_t size)
 	{
+#ifdef _WIN32
 		SIZE_T bytesRead;
 		pMemory cMemory;
 
 		NTSTATUS status = cMemory.pfnNtReadVirtualMemory(this->handle_, (PVOID)(address), buffer, static_cast<ULONG>(size), (PULONG)&bytesRead);
 	
-		return status == 0x00000000/*STATUS_SUCCESS*/ || bytesRead == size;
+		return status == 0x00000000/*STATUS_SUCCESS*/ && bytesRead == size;
+#else
+		return read_raw_linux(address, buffer, size);
+#endif
 	}
 
 	template<class T>
 	void write(uintptr_t address, T value)
 	{
+#ifdef _WIN32
 		pMemory cMemory;
 		cMemory.pfnNtWriteVirtualMemory(handle_, (void*)address, &value, sizeof(T), 0);
+#else
+		write_raw_linux(address, &value, sizeof(T));
+#endif
 	}
 
 	template<class T>
 	T read(uintptr_t address)
 	{
 		T buffer{};
-		pMemory cMemory;
-
-		cMemory.pfnNtReadVirtualMemory(handle_, (void*)address, &buffer, sizeof(T), 0);
+		read_raw(address, &buffer, sizeof(T));
 		return buffer;
 	}
 
 	void write_bytes(uintptr_t addr, std::vector<uint8_t> patch)
 	{
+#ifdef _WIN32
 		pMemory cMemory;
 		cMemory.pfnNtWriteVirtualMemory(handle_, (void*)addr, &patch[0], patch.size(), 0);
+#else
+		if (!patch.empty()) write_raw_linux(addr, patch.data(), patch.size());
+#endif
 	}
 
 	uintptr_t read_multi_address(uintptr_t ptr, std::vector<uintptr_t> offsets)
@@ -115,7 +136,12 @@ public:
 
 private:
 	uint32_t FindProcessIdByProcessName(const char* process_name);
+#ifdef _WIN32
 	uint32_t FindProcessIdByWindowName(const char* window_name);
 	HWND GetWindowHandleFromProcessId(DWORD ProcessId);
+#else
+	bool read_raw_linux(uintptr_t address, void* buffer, size_t size) const;
+	bool write_raw_linux(uintptr_t address, const void* buffer, size_t size) const;
+#endif
 };
 #endif

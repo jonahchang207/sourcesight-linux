@@ -74,7 +74,7 @@ bool Engine::AwaitProcess() {
             break;
 
         if (process->pid_ && !process->handle_) {
-            LOGF(FATAL, "Insufficient permissions to open a handle to the process. Try running as Administrator.");
+            LOGF(FATAL, "Insufficient permissions to read the game process. Check ptrace_scope and process ownership.");
             return false;
         }
 
@@ -100,8 +100,15 @@ bool Engine::AwaitModules() {
     LOGF(INFO, "Waiting for the game to open...");
 
     do {
-        this->client = process->GetModule("client.dll");
-        this->engine = process->GetModule("engine2.dll");
+#ifdef _WIN32
+		this->client = process->GetModule("client.dll");
+		this->engine = process->GetModule("engine2.dll");
+#else
+		this->client = process->GetModule("libclient.so");
+		if (!this->client.base) this->client = process->GetModule("client.so");
+		this->engine = process->GetModule("libengine2.so");
+		if (!this->engine.base) this->engine = process->GetModule("engine2.so");
+#endif
 
         if (this->client.base && this->engine.base)
             break;

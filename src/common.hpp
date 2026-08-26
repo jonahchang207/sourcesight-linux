@@ -9,7 +9,16 @@
 #include <Logger.hpp>
 
 #include <iostream>
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <cstdint>
+using DWORD = std::uint32_t;
+using DWORD64 = std::uint64_t;
+using WORD = std::uint16_t;
+using byte = unsigned char;
+using LPVOID = void*;
+#endif
 
 #include <map>
 #include <array>

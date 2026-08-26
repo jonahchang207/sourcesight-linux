@@ -197,8 +197,9 @@ std::vector<DWORD64> Dumper::ScanMemory(const std::string& sig, DWORD64 start, D
 
     GetNextArray(next, signature);
 
-    MEMORY_BASIC_INFORMATION mbi;
-    while (VirtualQueryEx(process->handle_, reinterpret_cast<LPCVOID>(start), &mbi, sizeof(mbi)) != 0)
+#ifdef _WIN32
+	MEMORY_BASIC_INFORMATION mbi;
+	while (VirtualQueryEx(process->handle_, reinterpret_cast<LPCVOID>(start), &mbi, sizeof(mbi)) != 0)
     {
         int searches = 0;
         auto size = mbi.RegionSize;
@@ -208,7 +209,16 @@ std::vector<DWORD64> Dumper::ScanMemory(const std::string& sig, DWORD64 start, D
             if (result.size() >= number) {
                 delete[] buffer;
 	            return result;
-            }
+	}
+#else
+	while (start < end)
+	{
+		const auto size = static_cast<DWORD>(std::min<DWORD64>(MAX_BLOCK_SIZE, end - start));
+		ScanBlock(buffer, next, signature, start, size, result);
+		if (result.size() >= number) break;
+		start += size;
+	}
+#endif
 
             ScanBlock(buffer, next, signature, start + (MAX_BLOCK_SIZE * searches), MAX_BLOCK_SIZE, result);
 

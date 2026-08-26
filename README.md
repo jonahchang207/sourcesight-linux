@@ -2,6 +2,29 @@
 
 Simple external ESP for Counter-Strike 2. After years of development the codebase has been modernized for clarity and ease of use, featuring a redesigned interface, noticeable performance improvements, several quality-of-life additions, and automatic offset scanning to help maintain compatibility through game updates.
 
+> **SourceSight Linux / Omarchy port:** Linux platform support is under active
+> development on the `omarchy-port` branch. The platform, renderer, and build
+> layers are present; Linux-specific CS2 signatures still require validation
+> against the current native game build before gameplay use.
+
+## Omarchy Linux
+
+SourceSight targets Omarchy's Hyprland session through GLFW's X11 backend
+(XWayland), OpenGL 3, and Linux `process_vm_readv`. It does not inject a library
+or write into the game process.
+
+```bash
+git clone --recursive https://github.com/jonahchang207/sourcesight-linux.git
+cd sourcesight-linux
+chmod +x scripts/install-omarchy.sh
+./scripts/install-omarchy.sh
+```
+
+Use CS2's fullscreen-windowed mode. Press `Insert` or right `Shift` to toggle
+the menu and `End` to save and exit. If Linux denies memory reads, do not run
+the overlay as root; launch it as the same user/session as Steam and inspect
+your distribution's `kernel.yama.ptrace_scope` policy.
+
 ## Showcase
 
 > Click the picture below to go to the showcase video

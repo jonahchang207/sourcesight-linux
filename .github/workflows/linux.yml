@@ -1,0 +1,21 @@
+name: Omarchy Linux build
+
+on:
+  push:
+    branches: [main, omarchy-port]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Install build tools
+        run: pacman -Syu --noconfirm git cmake curl glfw-x11 libx11 mesa
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --parallel 2

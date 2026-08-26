@@ -5,6 +5,10 @@
 #include "gui/frontend/esp/Esp.hpp"
 #include "gui/frontend/menu/Menu.hpp"
 #include "gui/frontend/overlays/Overlays.hpp"
+#ifndef _WIN32
+#include <X11/keysym.h>
+#include <filesystem>
+#endif
 
 bool Renderer::Init() {
     return GetInstance().InitImpl();
@@ -46,8 +50,10 @@ bool Renderer::InitImpl() {
     Esp::Init();
     Overlays::Init();
 
+#ifdef _WIN32
     // Focus the game
     SetForegroundWindow(Engine::GetProcess()->hwnd_);
+#endif
 
     if (cfg::settings::streamproof)
         Window::SetAffinity(Window::hwnd, WindowAffinity::Invisible);
@@ -103,10 +109,16 @@ bool Renderer::HandleState() {
 
     static bool was_holding = false;
 
+#ifdef _WIN32
     bool pressed_insert = (GetAsyncKeyState(VK_INSERT) & 0x8000);
     bool pressed_rshift = (GetAsyncKeyState(VK_RSHIFT) & 0x8000);
 
     bool pressed_end = (GetAsyncKeyState(VK_END) & 0x8000);
+#else
+    bool pressed_insert = Window::IsKeyDown(XK_Insert);
+    bool pressed_rshift = Window::IsKeyDown(XK_Shift_R);
+    bool pressed_end = Window::IsKeyDown(XK_End);
+#endif
 
     bool should_toggle = !was_holding && (pressed_insert || pressed_rshift);
 
@@ -115,10 +127,12 @@ bool Renderer::HandleState() {
 
         // Release cursor when opening the menu
         // Sometimes flashes the render as its handling the window order
+#ifdef _WIN32
         if (this->isOpen)
             SetForegroundWindow(Window::hwnd);
         else
             SetForegroundWindow(Engine::GetProcess()->hwnd_);
+#endif
 
         Window::SetClickthrough(Window::hwnd, !this->isOpen);
         LOGF(VERBOSE, "Captured global VK_INSERT or VK_RSHIFT, toggling menu state to {}", this->isOpen);
@@ -138,6 +152,7 @@ bool Renderer::HandleState() {
 bool Renderer::HandleWindowOrder() {
     auto p = Engine::GetProcess();
 
+#ifdef _WIN32
     if (!p || (!p->hwnd_ && !p->UpdateHWND()))
         return false;
 
@@ -198,4 +213,14 @@ bool Renderer::HandleWindowOrder() {
     last_rect = window_rect;
 
     return true;
+#else
+    if (!p || !p->pid_ || !std::filesystem::exists("/proc/" + std::to_string(p->pid_))) {
+        this->isRunning = false;
+        return false;
+    }
+    // Hyprland owns stacking and workspace visibility. The supplied rules keep
+    // this fullscreen transparent surface above CS2 without stealing focus.
+    this->isFocused = true;
+    return true;
+#endif
 }

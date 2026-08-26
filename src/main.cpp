@@ -32,11 +32,13 @@ int main()
 
     LogHelper::Init();
 
-    LOGF(INFO, "Compiled {}, Welcome to cs2-external-esp-recode!", __TIMESTAMP__);
+    LOGF(INFO, "Compiled {}, Welcome to SourceSight Linux!", __TIMESTAMP__);
 
+#ifdef _WIN32
     // Needs to be ran as ADMINISTRATOR
     if (!SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS))
         LOGF(WARNING, "Could not set application process priority to HIGH");
+#endif
 
     if (!Updater::Init() || !Updater::Process()) {
         LOGF(FATAL, "Updater failed to run, the application has not verified its status, execution its not recommended");
@@ -62,5 +64,7 @@ int main()
 exit:
     LOGF(INFO, "Thats it, im done, hope you had a great time!");
     LogHelper::Destroy();
+#ifdef _WIN32
     std::cin.get();
+#endif
 }
