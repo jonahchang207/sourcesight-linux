@@ -172,12 +172,11 @@ void Esp::RenderPlayerTracker(Player player, std::pair<Vec2_t, Vec2_t> bounds, b
 	auto width = bounds.second.x - bounds.first.x;
 	auto color = mate ? cfg::esp::colors::tracker_team : cfg::esp::colors::tracker_enemy;
 
-	d->AddCircle(
-		head,
-		width / 6,
-		ImColor(color),
-		15
-	);
+	const float radius = width / 6;
+	if (cfg::esp::head_tracker_filled)
+		d->AddCircleFilled(head, radius, ImColor(color), 15);
+	else
+		d->AddCircle(head, radius, ImColor(color), 15);
 }
 
 void Esp::RenderPlayerBars(Player player, std::pair<Vec2_t, Vec2_t> bounds) {

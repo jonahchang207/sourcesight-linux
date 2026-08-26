@@ -131,6 +131,7 @@ void Menu::RenderImpl() {
 						ImGui::Checkbox("Head Tracker", &cfg::esp::head_tracker);
 						ImGui::BeginDisabled(!cfg::esp::head_tracker);
 						{
+							ImGui::Checkbox("Filled Head Tracker", &cfg::esp::head_tracker_filled);
 							ImGui::SameLine();
 							ImGui::ColorEdit4("Team head tracker color", cfg::esp::colors::tracker_team.data(), color_flags);
 							ImGui::SameLine();
