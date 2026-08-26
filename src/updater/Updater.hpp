@@ -38,5 +38,5 @@ private:
     Status status;
     bool isSetup = false;
     int current_version = 115;
-    std::string status_url = "https://github.com/IMXNOOBX/cs2-external-esp/raw/refs/heads/main/.github/status.json";
+    std::string status_url = "https://github.com/jonahchang207/sourcesight-linux/raw/refs/heads/main/.github/status.json";
 };
