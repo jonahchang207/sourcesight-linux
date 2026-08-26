@@ -15,7 +15,7 @@ chmod +x scripts/install-omarchy.sh
 ./scripts/install-omarchy.sh
 ```
 
-Use CS2's fullscreen-windowed mode. Press `Insert` or right `Shift` to toggle the menu and `End` to save and exit. If Linux denies memory reads, do not run the overlay as root; launch it as the same user/session as Steam and inspect your distribution's `kernel.yama.ptrace_scope` policy.
+Use CS2's fullscreen-windowed mode. Press `Insert` to toggle the menu and `End` to save and exit. On Linux the overlay is click-through while playing (clicks and keys always reach the game). While the menu is open the overlay captures *all* clicks, so nothing falls through to CS2: the menu, its color picker popups, and the draggable panels (radar, spectator list) are all fully mouse-usable, and keyboard navigation (arrow keys/Tab and Space/Enter) also works. One caveat: while alive in a round CS2 grabs the mouse, so clicks also reach CS2 and may fire your weapon — configure mid-round with the keyboard, or when dead/spectating with the mouse. Note that right `Shift` is intentionally *not* a toggle key on Linux: the overlay never steals keys, so right Shift also reaches CS2, where it is the walk key — toggling on it would close the menu every time you walk. If Linux denies memory reads, do not run the overlay as root; launch it as the same user/session as Steam and inspect your distribution's `kernel.yama.ptrace_scope` policy.
 
 ## 🎬 Showcase
 
@@ -25,6 +25,8 @@ Use CS2's fullscreen-windowed mode. Press `Insert` or right `Shift` to toggle th
 
 - External, read-only ESP: box, skeleton, head tracker, health, armor, name, money, weapon, ammo, ping, and team/enemy flags
 - Bomb ESP, radar, spectator list, and velocity graph
+- AWP quickswitch macro: with the AWP equipped, left-click automatically taps `3` (knife), waits the configured delay, then taps `1` to cancel the bolt animation
+- Bullet tracers: when a player fires, a short fading line is drawn along their aim direction (own shots and enemies, team colors, configurable length/duration/thickness)
 - Automatic offset scanning to stay compatible through game updates
 - Click-based UI (Dear ImGui) with streamproof and watermark options
 - Builds on Windows (Visual Studio) and Linux (CMake)

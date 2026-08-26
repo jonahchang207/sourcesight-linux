@@ -1,5 +1,7 @@
 #pragma once
 
+#include <unordered_map>
+
 #include "core/engine/cache/Cache.hpp"
 
 class Esp {
@@ -39,7 +41,23 @@ private:
     void RenderPlayerFlags(Player player, std::pair<Vec2_t, Vec2_t> bounds, bool mate = false);
     void RenderPlayerTracker(Player player, std::pair<Vec2_t, Vec2_t> bounds, bool mate = false);
     void RenderPlayerTracers(Player source, Player player, bool mate = false);
+    void RenderBulletTracers(Player player, bool mate = false);
     
     void RenderBombBox(Bomb bomb);
 	void RenderCrosshair(Player local);
+
+    // One fading line per fired shot, keyed by nothing: they just live until
+    // their duration expires.
+    struct BulletTracer {
+        Vec3_t origin;   // world-space start (eye position)
+        Vec3_t dir;      // unit aim direction
+        float start_time; // ImGui::GetTime() when the shot was detected
+        bool mate;       // same team as local -> team color
+    };
+
+    // player index -> (last clip ammo, weapon id): a clip-ammo decrease means
+    // a shot was fired (m_iClip1 is a verified offset, unlike the drifted
+    // subclass shot-time fields). The weapon id guards against weapon switches.
+    std::unordered_map<int, std::pair<int32_t, short>> last_ammo;
+    std::vector<BulletTracer> tracers;
 };

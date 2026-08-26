@@ -141,10 +141,10 @@ void Menu::RenderImpl() {
 						{
 							ImGui::Checkbox("Filled Head Tracker", &cfg::esp::head_tracker_filled);
 							ImGui::SliderFloat("Head tracker size", &cfg::esp::head_tracker_size, 2.0f, 14.0f, "%.1f");
-							ImGui::SameLine();
-							ImGui::ColorEdit4("Team head tracker color", cfg::esp::colors::tracker_team.data(), color_flags);
-							ImGui::SameLine();
-							ImGui::ColorEdit4("Enemy head tracker color", cfg::esp::colors::tracker_enemy.data(), color_flags);
+							// One clearly labeled picker per team, on its own row, so the
+							// team and enemy head colors are independently editable.
+							ImGui::ColorEdit4("Team head color", cfg::esp::colors::tracker_team.data(), color_flags & ~ImGuiColorEditFlags_NoLabel);
+							ImGui::ColorEdit4("Enemy head color", cfg::esp::colors::tracker_enemy.data(), color_flags & ~ImGuiColorEditFlags_NoLabel);
 						}
 						ImGui::EndDisabled();
 
@@ -156,6 +156,24 @@ void Menu::RenderImpl() {
 							ImGui::SameLine();
 							ImGui::ColorEdit4("Enemy tracer color", cfg::esp::colors::tracer_enemy.data(), color_flags);
 							ImGui::SliderFloat("Tracer thickness", &cfg::esp::tracer_thickness, 1.0f, 4.0f, "%.1f");
+						}
+						ImGui::EndDisabled();
+
+						ImGui::Checkbox("Bullet Tracer", &cfg::esp::bullet_tracer::enabled);
+						ImGui::SetItemTooltip(
+							"Draws a short line along a player's aim direction for a moment\n"
+							"after they fire a shot (detected via the weapon's last-shot time).\n"
+							"Includes your own shots."
+						);
+						ImGui::BeginDisabled(!cfg::esp::bullet_tracer::enabled);
+						{
+							ImGui::SameLine();
+							ImGui::ColorEdit4("Team bullet color", cfg::esp::bullet_tracer::team.data(), color_flags);
+							ImGui::SameLine();
+							ImGui::ColorEdit4("Enemy bullet color", cfg::esp::bullet_tracer::enemy.data(), color_flags);
+							ImGui::SliderFloat("Bullet length", &cfg::esp::bullet_tracer::length, 50.0f, 1000.0f, "%.0f u");
+							ImGui::SliderFloat("Bullet duration", &cfg::esp::bullet_tracer::duration, 0.05f, 0.5f, "%.2f s");
+							ImGui::SliderFloat("Bullet thickness", &cfg::esp::bullet_tracer::thickness, 1.0f, 4.0f, "%.1f");
 						}
 						ImGui::EndDisabled();
 					}
@@ -315,6 +333,31 @@ void Menu::RenderImpl() {
 						ImGui::Checkbox("Disable Rotation", &cfg::world::radar::no_rotate);
 					}
 					ImGui::EndDisabled();
+				}
+				else if (active_tab == Tab::MACRO)
+				{
+					ImGui::Text("AWP Quickswitch");
+					ImGui::Separator();
+
+					ImGui::Checkbox("AWP Quickswitch", &cfg::macro::awp_quickswitch);
+					ImGui::SetItemTooltip(
+						"When the AWP is equipped and left-click is detected, automatically\n"
+						"pulls out the knife (key 3), waits, then switches back (key 1)\n"
+						"to cancel the bolt animation."
+					);
+
+					ImGui::BeginDisabled(!cfg::macro::awp_quickswitch);
+					{
+						ImGui::SliderInt("Switch delay (ms)", &cfg::macro::delay_ms, 20, 500);
+					}
+					ImGui::EndDisabled();
+
+					ImGui::Spacing();
+					ImGui::TextWrapped(
+						"Runs while you are alive and in-game, and never while the menu is open.\n"
+						"The keys are injected at the OS level, so they reach the game even when\n"
+						"CS2 has the mouse grabbed."
+					);
 				}
 				else if (active_tab == Tab::SETTINGS)
 				{
@@ -488,8 +531,11 @@ void Menu::RenderStartupHelpImpl() {
 	if (Renderer::IsOpen())
 		has_opened_menu = true;
 
-	auto help = "To OPEN the menu, Use Insert or Right Shift keys"
-		"\n\t\t\t\tTo CLOSE, press the End key";
+	auto help = "To OPEN the menu: Insert key"
+		"\n\t\t\t\tWhile the menu is open, all clicks go to the menu/overlay, none to the game"
+		"\n\t\t\t\tMid-round CS2 grabs the mouse, so clicks may also fire your weapon"
+		"\n\t\t\t\tKeyboard navigation also works: Arrow/Tab to move, Space/Enter to toggle"
+		"\n\t\t\t\tEnd: save config and exit";
 	auto size = ImGui::CalcTextSize(help);
 
 	d->AddText(

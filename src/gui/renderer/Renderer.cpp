@@ -106,7 +106,17 @@ void Renderer::Render() {
     Overlays::Render();
 
     Menu::RenderStartupHelp();
-    if (isOpen) Menu::Render();
+    if (isOpen) {
+        Menu::Render();
+#ifndef _WIN32
+        // Keep the menu clickable; everything outside it stays click-through.
+        Window::SetMenuCapture(true, Menu::GetPos().x, Menu::GetPos().y, Menu::GetSize().x, Menu::GetSize().y);
+#endif
+    } else {
+#ifndef _WIN32
+        Window::SetMenuCapture(false, 0.f, 0.f, 0.f, 0.f);
+#endif
+    }
 
     Window::EndRender();
 }
@@ -123,7 +133,11 @@ bool Renderer::HandleState() {
     bool pressed_end = (GetAsyncKeyState(VK_END) & 0x8000);
 #else
     bool pressed_insert = Window::IsKeyDown(XK_Insert);
-    bool pressed_rshift = Window::IsKeyDown(XK_Shift_R);
+    // Right Shift is deliberately NOT a toggle key on Linux: the overlay is
+    // always keyboard-transparent, so the key also reaches CS2, where it is
+    // the walk key. Toggling on it would close the menu every time the player
+    // walks. Insert only.
+    bool pressed_rshift = false;
     bool pressed_end = Window::IsKeyDown(XK_End);
 #endif
 
@@ -142,7 +156,7 @@ bool Renderer::HandleState() {
 #endif
 
         Window::SetClickthrough(Window::hwnd, !this->isOpen);
-        LOGF(VERBOSE, "Captured global VK_INSERT or VK_RSHIFT, toggling menu state to {}", this->isOpen);
+        LOGF(VERBOSE, "Toggling menu state to {}", this->isOpen);
 
         // Not the best way, but wont bother the user
         // As far as i know, no one has complained about the config saving system :D

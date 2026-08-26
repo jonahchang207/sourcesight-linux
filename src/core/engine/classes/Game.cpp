@@ -35,7 +35,8 @@ bool Game::UpdateEntityList() {
 	auto client = Engine::GetClient();
 
 	this->entity_list = p->read<DWORD64>(client.base + offsets::entityList);
-	this->list_entry = p->read<DWORD64>(this->entity_list + 0x10);
+	// The entity list's controller list sits at +0x0 in current builds (was +0x10).
+	this->list_entry = p->read<DWORD64>(this->entity_list + 0x0);
 
 	return true;
 }

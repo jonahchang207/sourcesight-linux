@@ -13,8 +13,8 @@ bool Weapon::Update() {
     if (!entity_list)
         return false;
 
-    // Similar to Player::GetPawn()
-    uintptr_t bucket_ptr = p->read<uintptr_t>(entity_list + 0x10 + 0x8 * ((slot_index & 0x7FFF) >> 9));
+    // Similar to Player::GetPawn(); buckets sit at +0x0 in current builds (was +0x10).
+    uintptr_t bucket_ptr = p->read<uintptr_t>(entity_list + 0x0 + 0x8 * ((slot_index & 0x7FFF) >> 9));
     if (!bucket_ptr)
         return false;
 

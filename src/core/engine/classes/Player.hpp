@@ -37,8 +37,10 @@ public:
     uint64_t steam_id{};
 
     Weapon weapon;
-    int32_t ammo;
-    bool is_reloading;
+    int32_t ammo = 0;
+    bool is_reloading = false;
+
+    Vec3_t eye_angles;   // m_angEyeAngles (pitch, yaw, roll)
 
     std::vector<bone_pos> bone_list;
 

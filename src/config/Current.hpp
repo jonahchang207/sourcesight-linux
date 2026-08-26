@@ -23,6 +23,16 @@ namespace cfg {
 		inline bool spotted = false;
 
 		inline bool tracers = false;
+
+		namespace bullet_tracer {
+			inline bool enabled = false;
+			inline float length = 300.0f;
+			inline float duration = 0.12f;
+			inline float thickness = 1.5f;
+
+			inline color_t team{ 0.f, 1.f, 0.5f, 0.6f };
+			inline color_t enemy{ 1.f, 0.3f, 0.3f, 0.6f };
+		}
 		
 		inline bool bomb = true;
 
@@ -46,8 +56,8 @@ namespace cfg {
 			inline color_t skeleton_team{ 0.f, 1.f, 0.f, 0.5f };
 			inline color_t skeleton_enemy{ 1.f, 0.f, 0.f, 0.5f };
 
-			inline color_t tracker_team{ 1.f, 1.f, 1.f, 0.3f };
-			inline color_t tracker_enemy{ 1.f, 1.f, 1.f, 0.3f };
+			inline color_t tracker_team{ 1.f, 1.f, 1.f, 0.5f };
+			inline color_t tracker_enemy{ 1.f, 0.25f, 0.25f, 0.5f };
 
 			inline color_t tracer_team{ 0.f, 1.f, 0.f, 0.5f };
 			inline color_t tracer_enemy{ 1.f, 0.f, 0.f, 0.5f };
@@ -127,6 +137,11 @@ namespace cfg {
 		inline bool streamproof = false;
 		inline bool vsync = false;
 		inline bool free_cpu = true;
+	}
+
+	namespace macro {
+		inline bool awp_quickswitch = false;
+		inline int delay_ms = 100;
 	}
 
 	// Not stored, just for testing

@@ -31,6 +31,10 @@ namespace offsets
 		constexpr std::ptrdiff_t m_vecAbsVelocity = 0x568; // Vector
 
 		constexpr std::ptrdiff_t m_pGameSceneNode = 0x4A0; // CGameSceneNode*
+		// The July a2x Linux dump lists 0x41D0; this build's C_CSPlayerPawn
+		// subclass region is shifted +0x10. Verified against the live game by
+		// correlating the facing direction with each player's velocity.
+		constexpr std::ptrdiff_t m_angEyeAngles = 0x41E0; // QAngle (pitch, yaw, roll) - C_CSPlayerPawn
 		
 		constexpr std::ptrdiff_t m_entitySpottedState = 0x2AE8; // EntitySpottedState_t
 		constexpr std::ptrdiff_t m_bSpottedByMask = 0xC; // uint32[2] - EntitySpottedState_t

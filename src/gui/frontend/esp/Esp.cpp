@@ -4,6 +4,23 @@
 #include "assets/fonts/WeaponIcons.h"
 #include "assets/fonts/Icons.h"
 
+#include <numbers>
+
+namespace {
+
+// Source engine AngleVectors: yaw 0 faces +X, pitch up is negative.
+Vec3_t AngleToDirection(const Vec3_t& angles) {
+    const float pitch = angles.x * (std::numbers::pi_v<float> / 180.0f);
+    const float yaw = angles.y * (std::numbers::pi_v<float> / 180.0f);
+    return Vec3_t(
+        std::cos(pitch) * std::cos(yaw),
+        std::cos(pitch) * std::sin(yaw),
+        -std::sin(pitch)
+    ).normalized();
+}
+
+} // namespace
+
 bool Esp::Init() {
 	return GetInstance().InitImpl();
 }
@@ -90,8 +107,14 @@ void Esp::RenderImpl() {
 			continue;
 
 		RenderPlayerTracers(local, player, mate);
+		RenderBulletTracers(player, mate);
 		RenderPlayer(player, mate);
 	}
+
+	// The local player's own shots also get tracers (own team color), but only
+	// while alive: a dead local player has no weapon/eye data (stale reads).
+	if (cfg::esp::bullet_tracer::enabled && local.alive)
+		RenderBulletTracers(local, true);
 
 	RenderCrosshair(local);
 	RenderBombBox(bomb);
@@ -578,4 +601,50 @@ void Esp::RenderPlayerTracers(Player source, Player player, bool mate) {
 		ImColor(color),
 		std::clamp(cfg::esp::tracer_thickness, 1.0f, 4.0f)
 	);
+}
+
+void Esp::RenderBulletTracers(Player player, bool mate) {
+	if (!cfg::esp::bullet_tracer::enabled)
+		return;
+
+	const float now = static_cast<float>(ImGui::GetTime());
+
+	// Detect a new shot: clip ammo dropped since the last frame we saw this
+	// player. The first observation only seeds the baseline (no phantom). A
+	// weapon switch also changes clip ammo, so it must not count as a shot.
+	auto& prev = last_ammo[player.index];
+	const bool same_weapon = prev.second == player.weapon.item_index;
+	const bool ammo_dropped = same_weapon && player.ammo >= 0 && prev.first > player.ammo;
+	prev = { player.ammo, player.weapon.item_index };
+
+	if (ammo_dropped) {
+		tracers.push_back({
+			player.pos + Vec3_t(0.f, 0.f, 64.f), // eye height (approx)
+			AngleToDirection(player.eye_angles),
+			now,
+			mate
+		});
+	}
+
+	// Render and expire active tracers, fading them out over their lifetime.
+	const float length = std::max(1.0f, cfg::esp::bullet_tracer::length);
+	const float duration = std::max(0.02f, cfg::esp::bullet_tracer::duration);
+	const float thickness = std::clamp(cfg::esp::bullet_tracer::thickness, 1.0f, 4.0f);
+
+	for (auto it = tracers.begin(); it != tracers.end();) {
+		const float age = now - it->start_time;
+		if (age > duration) {
+			it = tracers.erase(it);
+			continue;
+		}
+
+		Vec2_t a, b;
+		if (matrix.wts(it->origin, io.DisplaySize, a) &&
+			matrix.wts(it->origin + it->dir * length, io.DisplaySize, b)) {
+			auto color = it->mate ? cfg::esp::bullet_tracer::team : cfg::esp::bullet_tracer::enemy;
+			color.a *= 1.f - age / duration;
+			d->AddLine(a, b, ImColor(color), thickness);
+		}
+		++it;
+	}
 }

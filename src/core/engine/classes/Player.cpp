@@ -53,7 +53,8 @@ bool Player::GetPawn() {
 
 	this->pawn_controller_addr = entity_pawn_address;
 
-	auto entity_pawn_list_entry = p->read<uintptr_t>(this->entity_list + 0x10 + 0x8 * ((entity_pawn_address & 0x7FFF) >> 9));
+	// Pawn buckets sit at entity_list + 0x0 in current builds (was +0x10).
+	auto entity_pawn_list_entry = p->read<uintptr_t>(this->entity_list + 0x0 + 0x8 * ((entity_pawn_address & 0x7FFF) >> 9));
 
 	if (!entity_pawn_list_entry)
 		return false;
@@ -108,6 +109,9 @@ bool Player::UpdatePawn() {
 
 	this->vel = p->read<Vec3_t>(pawn + offsets::pawn::m_vecAbsVelocity);
 
+	// Used by the bullet tracer ESP: where the player is looking.
+	this->eye_angles = p->read<Vec3_t>(pawn + offsets::pawn::m_angEyeAngles);
+
 	this->team = p->read<uint8_t>(pawn + offsets::pawn::m_iTeamNum);
 
 	this->armor = p->read<int>(pawn + offsets::pawn::m_ArmorValue);
@@ -116,9 +120,13 @@ bool Player::UpdatePawn() {
 	this->flashed = p->read<float>(pawn + offsets::pawn::m_flFlashOverlayAlpha) > 0;
 	this->scoped = p->read<bool>(pawn + offsets::pawn::m_bIsScoped);
 
-	if (!UpdateSkeleton()) {
-		LOGF(FATAL, "Failed to update skeleton");
-		return false;
+	static bool skeleton_failed = false;
+
+	if (!UpdateSkeleton() && !skeleton_failed) {
+		// Skeleton is cosmetic: don't drop the whole player if the bone read
+		// fails (wrong bone offsets for this game build). Log once instead.
+		skeleton_failed = true;
+		LOGF(WARNING, "Failed to read player skeleton (bone offsets may need updating); box ESP still works");
 	}
 
 	// Shows errors when player just respawned
@@ -134,18 +142,36 @@ bool Player::UpdatePawn() {
 bool Player::UpdateSkeleton() {
 	auto p = Engine::GetProcess();
 
+	// One-time diagnostic: reports exactly where the bone chain fails (or if
+	// the bones read OK), so offset/struct issues are identifiable from a
+	// single in-game run instead of silently producing no skeleton.
+	static bool skeleton_diag_done = false;
+	const auto diag = [](const std::string& msg) {
+		if (!skeleton_diag_done) {
+			skeleton_diag_done = true;
+			LOGF(WARNING, "Skeleton debug: {}", msg);
+		}
+	};
+
 	auto game_scene = p->read<DWORD64>(this->pawn + offsets::pawn::m_pGameSceneNode);
 
-	if (!game_scene)
+	if (!game_scene) {
+		diag(std::format("m_pGameSceneNode read returned 0 (pawn=0x{:X} + 0x{:X})", this->pawn, offsets::pawn::m_pGameSceneNode));
 		return false;
+	}
 
-	auto bone_array = p->read<DWORD64>(game_scene + (offsets::bone::m_modelState + 0x80));
+	const auto bone_array_addr = game_scene + (offsets::bone::m_modelState + 0x80);
+	auto bone_array = p->read<DWORD64>(bone_array_addr);
 
-	if (!bone_array)
+	if (!bone_array) {
+		diag(std::format("bone_array read returned 0 (game_scene=0x{:X}, ptr at 0x{:X})", game_scene, bone_array_addr));
 		return false;
+	}
 
-	if (!p->read_raw(bone_array, bones, sizeof(bones)))
+	if (!p->read_raw(bone_array, bones, sizeof(bones))) {
+		diag(std::format("bone read_raw failed (bone_array=0x{:X}, bytes={})", bone_array, sizeof(bones)));
 		return false;
+	}
 
 	for (int i = 0; i < 30; i++)
 		this->bone_list.push_back({ bones[i].pos });

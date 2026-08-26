@@ -2,6 +2,7 @@
 
 #include "core/offsets/Dumper.hpp"
 #include "core/engine/cache/Cache.hpp"
+#include "core/engine/classes/Macro.hpp"
 
 bool Engine::Init() {
     return GetInstance().InitImpl();
@@ -56,11 +57,10 @@ void Engine::Thread() {
     // uintptr_t number = process->read<uintptr_t>(base_engine.base + offsets::buildNumber);
 
     while (true) {
-        auto start = steady_clock::now();
+        auto start = steady_clock::now();		Cache::Refresh();
+		Macro::Update();
 
-        Cache::Refresh();
-
-        if (cfg::settings::free_cpu)
+		if (cfg::settings::free_cpu)
             std::this_thread::sleep_until(start + 1ms);
     }
 }

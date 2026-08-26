@@ -52,6 +52,17 @@ bool Config::ReadImpl() {
 		cfg::esp::health_number = data["esp"].value("health_number", false);
 		cfg::esp::tracers = data["esp"].value("tracers", false);
 		cfg::esp::bomb = data["esp"].value("bomb", true);
+
+		// bullet tracer
+		if (data["esp"].contains("bullet_tracer")) {
+			const auto& bt = data["esp"]["bullet_tracer"];
+			cfg::esp::bullet_tracer::enabled = bt.value("enabled", false);
+			cfg::esp::bullet_tracer::length = bt.value("length", 300.0f);
+			cfg::esp::bullet_tracer::duration = bt.value("duration", 0.12f);
+			cfg::esp::bullet_tracer::thickness = bt.value("thickness", 1.5f);
+			cfg::esp::bullet_tracer::team = JsonToColor(bt, "team", { 0.f, 1.f, 0.5f, 0.6f });
+			cfg::esp::bullet_tracer::enemy = JsonToColor(bt, "enemy", { 1.f, 0.3f, 0.3f, 0.6f });
+		}
 		
 		// flags
 		cfg::esp::flags::name = data["esp"]["flags"].value("name", true);
@@ -73,8 +84,8 @@ bool Config::ReadImpl() {
 		cfg::esp::colors::skeleton_team = JsonToColor(col, "skeleton_team", { 0.f, 1.f, 0.f, 0.5f });
 		cfg::esp::colors::skeleton_enemy = JsonToColor(col, "skeleton_enemy", { 1.f, 0.f, 0.f, 0.5f });
 
-		cfg::esp::colors::tracker_team = JsonToColor(col, "tracker_team", { 1.f, 1.f, 1.f, 0.3f });
-		cfg::esp::colors::tracker_enemy = JsonToColor(col, "tracker_enemy", { 1.f, 1.f, 1.f, 0.3f });
+		cfg::esp::colors::tracker_team = JsonToColor(col, "tracker_team", { 1.f, 1.f, 1.f, 0.5f });
+		cfg::esp::colors::tracker_enemy = JsonToColor(col, "tracker_enemy", { 1.f, 0.25f, 0.25f, 0.5f });
 
 		cfg::esp::colors::tracer_team = JsonToColor(col, "tracer_team", { 0.f, 1.f, 0.f, 0.5f });
 		cfg::esp::colors::tracer_enemy = JsonToColor(col, "tracer_enemy", { 1.f, 0.f, 0.f, 0.5f });
@@ -145,6 +156,13 @@ bool Config::ReadImpl() {
 		cfg::settings::vsync = data["utils"].value("vsync", true);
 		cfg::settings::free_cpu = data["utils"].value("free_cpu", true);
 		//cfg::settings::open_menu_key = data["utils"].value("open_menu_key", 0);
+
+		// macro (guard: older configs may not have the section, and operator[] on
+		// a missing key creates null, which .value() rejects)
+		if (data.contains("macro")) {
+			cfg::macro::awp_quickswitch = data["macro"].value("awp_quickswitch", false);
+			cfg::macro::delay_ms = data["macro"].value("delay_ms", 100);
+		}
 	}
 	catch (const std::exception& e) {
 		LOGF(FATAL, "Failed to parse configuration");
@@ -181,6 +199,14 @@ bool Config::WriteImpl() {
 	data["esp"]["spotted"] = cfg::esp::spotted;
 	data["esp"]["tracers"] = cfg::esp::tracers;
 	data["esp"]["bomb"] = cfg::esp::bomb;
+
+	// bullet tracer
+	data["esp"]["bullet_tracer"]["enabled"] = cfg::esp::bullet_tracer::enabled;
+	data["esp"]["bullet_tracer"]["length"] = cfg::esp::bullet_tracer::length;
+	data["esp"]["bullet_tracer"]["duration"] = cfg::esp::bullet_tracer::duration;
+	data["esp"]["bullet_tracer"]["thickness"] = cfg::esp::bullet_tracer::thickness;
+	ColorToJson(data["esp"]["bullet_tracer"], "team", cfg::esp::bullet_tracer::team);
+	ColorToJson(data["esp"]["bullet_tracer"], "enemy", cfg::esp::bullet_tracer::enemy);
 
 	// flags
 	data["esp"]["flags"]["name"] = cfg::esp::flags::name;
@@ -273,6 +299,10 @@ bool Config::WriteImpl() {
 	data["utils"]["vsync"] = cfg::settings::vsync;
 	data["utils"]["free_cpu"] = cfg::settings::free_cpu;
 	//data["utils"]["open_menu_key"] = cfg::settings::open_menu_key;
+
+	// macro
+	data["macro"]["awp_quickswitch"] = cfg::macro::awp_quickswitch;
+	data["macro"]["delay_ms"] = cfg::macro::delay_ms;
 
 	f << std::setw(4) << data << std::endl;
 	f.close();

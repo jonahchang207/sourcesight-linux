@@ -64,6 +64,12 @@ public:
 #else
 	static bool IsKeyDown(int key);
 	static bool IsFocused();
+
+	// When the menu is open, keep the overlay click-through everywhere except
+	// the menu rectangle so the menu can be used with the mouse.
+	static void SetMenuCapture(bool enabled, float x, float y, float w, float h);
+	inline static bool capture_menu = false;
+	inline static float menu_rect[4] = { 0.f, 0.f, 0.f, 0.f };
 #endif
 	inline static bool renderMenu = false;
 	inline static bool shouldRun = true;

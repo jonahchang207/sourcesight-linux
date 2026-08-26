@@ -53,10 +53,9 @@ bool Cache::RefreshImpl() {
         auto player = Player(i, game.entity_list, game.list_entry);
 
         if (!player.Update())
-            continue;
+            continue;		if (player.localplayer)
+			this->local = player;
 
-        if (player.localplayer)
-            this->local = player;
 
         player.has_c4 = bomb.carrier != 0 && player.pawn_controller_addr == bomb.carrier;
 
@@ -67,11 +66,9 @@ bool Cache::RefreshImpl() {
         //    LOGF(FATAL, "Offset mismatch, initial({}) current({}); there is more than one local player, update needed", this->local.index, player.index);
     
         scan.push_back(player);
-    }
+    }	players = std::move(scan);
+	duration = duration_cast<std::chrono::milliseconds>(steady_clock::now() - now);
+	last = now;
 
-    players = std::move(scan);
-    duration = duration_cast<std::chrono::milliseconds>(steady_clock::now() - now);
-    last = now;
-
-    return true;
+	return true;
 }
