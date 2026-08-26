@@ -41,18 +41,21 @@ private:
     void RenderPlayerFlags(Player player, std::pair<Vec2_t, Vec2_t> bounds, bool mate = false);
     void RenderPlayerTracker(Player player, std::pair<Vec2_t, Vec2_t> bounds, bool mate = false);
     void RenderPlayerTracers(Player source, Player player, bool mate = false);
-    void RenderBulletTracers(Player player, bool mate = false);
+    void RenderBulletTracers(Player player, const std::vector<Player>& players, bool mate = false);
     
     void RenderBombBox(Bomb bomb);
 	void RenderCrosshair(Player local);
+	void RenderAimFov();
 
-    // One fading line per fired shot, keyed by nothing: they just live until
-    // their duration expires.
+    // One glowing line per fired shot: from the shooter's gun tip to the
+    // collision point, frozen at fire time and kept visible for the configured
+    // duration. Only rendered while the shot origin is in our line of sight.
     struct BulletTracer {
-        Vec3_t origin;   // world-space start (eye position)
-        Vec3_t dir;      // unit aim direction
+        Vec3_t origin;    // world-space start: the shooter's gun tip
+        Vec3_t end;       // world-space impact: first player hit, or max trace
         float start_time; // ImGui::GetTime() when the shot was detected
-        bool mate;       // same team as local -> team color
+        bool mate;        // same team as local -> team color
+        bool from_local;  // own shot -> always in our line of sight
     };
 
     // player index -> (last clip ammo, weapon id): a clip-ammo decrease means

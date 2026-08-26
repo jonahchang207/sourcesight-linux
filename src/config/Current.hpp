@@ -26,8 +26,13 @@ namespace cfg {
 
 		namespace bullet_tracer {
 			inline bool enabled = false;
+			// Max trace distance when the shot does not hit a player (world hits
+			// cannot be traced from an external process).
 			inline float length = 300.0f;
-			inline float duration = 0.12f;
+			// How long the tracer stays visible before disappearing.
+			inline float duration = 5.0f;
+			// Forward extension from the hand grip to approximate the barrel tip.
+			inline float muzzle_offset = 45.0f;
 			inline float thickness = 1.5f;
 
 			inline color_t team{ 0.f, 1.f, 0.5f, 0.6f };
@@ -142,6 +147,24 @@ namespace cfg {
 	namespace macro {
 		inline bool awp_quickswitch = false;
 		inline int delay_ms = 100;
+	}
+
+	// Kernel mouse aiming: screen-space target tracking through
+	// /dev/person-mouse.  See core/input/MouseAim for the algorithms.
+	namespace aim {
+		inline bool enabled = false;
+		inline bool game_mode = true;
+		inline bool aim_at_enemies = true;
+		inline bool hotkey = true;
+
+		// 0 = head, 1 = body (chest), 2 = legs, 3 = in-between body & head (neck/spine1)
+		inline int target_part = 3;
+
+		// Tuned for smooth, human-like aim that looks legit.
+		inline float deadzone = 1.0f;
+		inline float max_delta = 12.0f;
+		inline float speed = 650.0f;
+		inline float fov_radius = 350.0f;
 	}
 
 	// Not stored, just for testing

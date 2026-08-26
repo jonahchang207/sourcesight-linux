@@ -3,6 +3,7 @@
 #include "core/offsets/Dumper.hpp"
 #include "core/engine/cache/Cache.hpp"
 #include "core/engine/classes/Macro.hpp"
+#include "core/input/MouseAim.hpp"
 
 bool Engine::Init() {
     return GetInstance().InitImpl();
@@ -59,6 +60,7 @@ void Engine::Thread() {
     while (true) {
         auto start = steady_clock::now();		Cache::Refresh();
 		Macro::Update();
+		MouseAim::Update();
 
 		if (cfg::settings::free_cpu)
             std::this_thread::sleep_until(start + 1ms);

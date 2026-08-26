@@ -1,9 +1,12 @@
 #include "Menu.hpp"
 
 #include "core/engine/cache/Cache.hpp"
+#include "core/input/MouseAim.hpp"
 #include "gui/renderer/Renderer.hpp" // Circular dependency
 #include "gui/renderer/window/Window.hpp" // Circular dependency
 #include "assets/fonts/Icons.h"
+
+#include <cmath>
 
 
 bool Menu::Init() {
@@ -161,9 +164,10 @@ void Menu::RenderImpl() {
 
 						ImGui::Checkbox("Bullet Tracer", &cfg::esp::bullet_tracer::enabled);
 						ImGui::SetItemTooltip(
-							"Draws a short line along a player's aim direction for a moment\n"
-							"after they fire a shot (detected via the weapon's last-shot time).\n"
-							"Includes your own shots."
+							"Draws a line from the shooter's gun tip to the impact point (first\n"
+							"player hit) whenever a shot is fired, keeping it visible for the\n"
+							"configured duration. Only renders while the shooter is in your\n"
+							"line of sight. Includes your own shots."
 						);
 						ImGui::BeginDisabled(!cfg::esp::bullet_tracer::enabled);
 						{
@@ -171,8 +175,9 @@ void Menu::RenderImpl() {
 							ImGui::ColorEdit4("Team bullet color", cfg::esp::bullet_tracer::team.data(), color_flags);
 							ImGui::SameLine();
 							ImGui::ColorEdit4("Enemy bullet color", cfg::esp::bullet_tracer::enemy.data(), color_flags);
-							ImGui::SliderFloat("Bullet length", &cfg::esp::bullet_tracer::length, 50.0f, 1000.0f, "%.0f u");
-							ImGui::SliderFloat("Bullet duration", &cfg::esp::bullet_tracer::duration, 0.05f, 0.5f, "%.2f s");
+							ImGui::SliderFloat("Bullet trace length", &cfg::esp::bullet_tracer::length, 50.0f, 1000.0f, "%.0f u");
+							ImGui::SliderFloat("Bullet muzzle offset", &cfg::esp::bullet_tracer::muzzle_offset, 10.0f, 150.0f, "%.0f u");
+							ImGui::SliderFloat("Bullet duration", &cfg::esp::bullet_tracer::duration, 0.5f, 10.0f, "%.1f s");
 							ImGui::SliderFloat("Bullet thickness", &cfg::esp::bullet_tracer::thickness, 1.0f, 4.0f, "%.1f");
 						}
 						ImGui::EndDisabled();
@@ -334,6 +339,76 @@ void Menu::RenderImpl() {
 					}
 					ImGui::EndDisabled();
 				}
+				else if (active_tab == Tab::AIM)
+				{
+					ImGui::Text("Aim");
+					ImGui::Separator();
+
+					// Driver status
+					if (MouseAim::DriverInstalled())					ImGui::TextColored(ImVec4(0.30f, 0.78f, 0.56f, 1.0f),
+						"Driver: ready");
+					else
+						ImGui::TextColored(ImVec4(0.92f, 0.34f, 0.34f, 1.0f),
+							"Driver: MISSING");
+
+					// Enable / Disable button
+					ImGui::Spacing();
+					if (!cfg::aim::enabled) {
+						ImGui::PushStyleColor(ImGuiCol_Button,
+							ImVec4(0.12f, 0.28f, 0.46f, 0.90f));
+						ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+							ImVec4(0.16f, 0.34f, 0.54f, 0.95f));
+						if (ImGui::Button("Enable Aim", ImVec2(-1, 32)))
+							cfg::aim::enabled = true;
+						ImGui::PopStyleColor(2);
+					}
+					else {
+						ImGui::PushStyleColor(ImGuiCol_Button,
+							ImVec4(0.38f, 0.12f, 0.16f, 0.90f));
+						ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+							ImVec4(0.48f, 0.16f, 0.20f, 0.95f));
+						if (ImGui::Button("Disable Aim", ImVec2(-1, 32)))
+							cfg::aim::enabled = false;
+						ImGui::PopStyleColor(2);
+					}
+
+					ImGui::Spacing();
+					ImGui::Checkbox("MB5 hotkey toggle", &cfg::aim::hotkey);
+
+					ImGui::Spacing();
+					ImGui::BeginDisabled(!cfg::aim::enabled);
+					{
+						ImGui::Checkbox("Game mode (CS2)", &cfg::aim::game_mode);
+						ImGui::Checkbox("Aim at enemies", &cfg::aim::aim_at_enemies);
+
+						ImGui::Spacing();
+						ImGui::Separator();
+						ImGui::Spacing();
+
+						// Body part target selector
+						static const char* target_parts[] = { "Head", "Body", "Legs", "Neck / Mid-body" };
+						int tp = cfg::aim::target_part;
+						if (ImGui::Combo("Target", &tp, target_parts, 4))
+							cfg::aim::target_part = tp;
+
+						ImGui::Spacing();
+
+						// FOV radius
+						float aim_w = 1920.0f;
+						float aim_h = 1080.0f;
+						MouseAim::ScreenSize(aim_w, aim_h);
+						const float fsr =
+							std::sqrt(aim_w * aim_w + aim_h * aim_h) * 0.5f;
+						ImGui::SliderFloat("FOV radius", &cfg::aim::fov_radius, 0.0f,
+							fsr, "%.0f px");
+					}
+					ImGui::EndDisabled();
+
+					ImGui::Spacing();
+					ImGui::TextWrapped(
+						"Only enable in environments where input automation is allowed."
+					);
+				}
 				else if (active_tab == Tab::MACRO)
 				{
 					ImGui::Text("AWP Quickswitch");
@@ -429,74 +504,100 @@ void Menu::RenderImpl() {
 
 void Menu::SetupStyles() {
 	ImGuiStyle& style = ImGui::GetStyle();
-	style.Colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
-	style.Colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
 
-	style.Colors[ImGuiCol_WindowBg] = ImColor(18, 20, 23);
-	style.Colors[ImGuiCol_ChildBg] = ImColor(14, 16, 19);
-	style.Colors[ImGuiCol_PopupBg] = ImVec4(0.10f, 0.11f, 0.13f, 1.00f);
-	style.Colors[ImGuiCol_Border] = ImColor(48, 54, 62);
+	// ── Sapphire Acrylic Glass palette ─────────────────────────────────
+	// Deep navy backgrounds with frosted transparency, sapphire blue
+	// accents, clean white text, and refined subtle borders.
+
+	style.Colors[ImGuiCol_Text] = ImVec4(0.92f, 0.94f, 0.98f, 1.00f);
+	style.Colors[ImGuiCol_TextDisabled] = ImVec4(0.42f, 0.48f, 0.56f, 1.00f);
+
+	// Window: deep navy with slight transparency for the glass feel
+	style.Colors[ImGuiCol_WindowBg] = ImVec4(0.06f, 0.07f, 0.10f, 0.94f);
+	style.Colors[ImGuiCol_ChildBg] = ImVec4(0.05f, 0.06f, 0.09f, 0.90f);
+	style.Colors[ImGuiCol_PopupBg] = ImVec4(0.07f, 0.08f, 0.12f, 0.96f);
+
+	// Borders: soft sapphire tint
+	style.Colors[ImGuiCol_Border] = ImVec4(0.14f, 0.22f, 0.34f, 0.45f);
 	style.Colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
 
-	style.Colors[ImGuiCol_FrameBg] = ImColor(34, 38, 44);
-	style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.18f, 0.28f, 0.36f, 1.00f);
-	style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.11f, 0.36f, 0.52f, 1.00f);
-	style.Colors[ImGuiCol_TitleBg] = ImVec4(0.08f, 0.08f, 0.09f, 1.00f);
-	style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.08f, 0.08f, 0.09f, 1.00f);
-	style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 0.51f);
+	// Frames (checkboxes, sliders, inputs): dark translucent with sapphire hover
+	style.Colors[ImGuiCol_FrameBg] = ImVec4(0.09f, 0.11f, 0.16f, 0.85f);
+	style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.12f, 0.18f, 0.28f, 0.90f);
+	style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.10f, 0.22f, 0.38f, 0.95f);
 
-	style.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
-	style.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.02f, 0.02f, 0.02f, 0.53f);
-	style.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.31f, 0.31f, 0.31f, 1.00f);
-	style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.41f, 0.41f, 0.41f, 1.00f);	style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.51f, 0.51f, 0.51f, 1.00f);
+	// Title bar: almost black with a hint of blue
+	style.Colors[ImGuiCol_TitleBg] = ImVec4(0.05f, 0.06f, 0.08f, 1.00f);
+	style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.06f, 0.08f, 0.12f, 1.00f);
+	style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.04f, 0.04f, 0.06f, 0.60f);
 
-	style.Colors[ImGuiCol_Button] = ImVec4(0.13f, 0.15f, 0.18f, 1.00f);
-	style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.17f, 0.25f, 0.32f, 1.00f);
-	style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.11f, 0.34f, 0.50f, 1.00f);
-	style.Colors[ImGuiCol_Header] = ImVec4(0.13f, 0.20f, 0.26f, 1.00f);
-	style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.17f, 0.28f, 0.36f, 1.00f);
-	style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.11f, 0.36f, 0.52f, 1.00f);
-	style.Colors[ImGuiCol_CheckMark] = ImVec4(0.20f, 0.68f, 0.94f, 1.00f);
-	style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.20f, 0.68f, 0.94f, 1.00f);
-	style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.12f, 0.48f, 0.72f, 1.00f);
-	style.Colors[ImGuiCol_Separator] = style.Colors[ImGuiCol_Border];
-	style.Colors[ImGuiCol_SeparatorHovered] = ImVec4(0.41f, 0.42f, 0.44f, 1.00f);
-	style.Colors[ImGuiCol_SeparatorActive] = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
+	// Menu bar and scrollbars: subtle dark layers
+	style.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.07f, 0.08f, 0.11f, 0.95f);
+	style.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.04f, 0.05f, 0.07f, 0.55f);
+	style.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.14f, 0.18f, 0.25f, 0.70f);
+	style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.18f, 0.24f, 0.34f, 0.80f);
+	style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.22f, 0.30f, 0.42f, 0.90f);
 
-	style.Colors[ImGuiCol_ResizeGrip] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-	style.Colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.29f, 0.30f, 0.31f, 0.67f);
-	style.Colors[ImGuiCol_ResizeGripActive] = ImVec4(0.29f, 0.30f, 0.31f, 0.95f);
+	// Buttons: sapphire-tinted glass
+	style.Colors[ImGuiCol_Button] = ImVec4(0.10f, 0.14f, 0.22f, 0.85f);
+	style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.14f, 0.22f, 0.34f, 0.92f);
+	style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.12f, 0.28f, 0.46f, 0.98f);
 
-	style.Colors[ImGuiCol_Tab] = ImVec4(0.08f, 0.08f, 0.09f, 0.83f);
-	style.Colors[ImGuiCol_TabHovered] = ImVec4(0.33f, 0.34f, 0.36f, 0.83f);
-	style.Colors[ImGuiCol_TabActive] = ImVec4(0.23f, 0.23f, 0.24f, 1.00f);
-	style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.08f, 0.08f, 0.09f, 1.00f);
-	style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.13f, 0.14f, 0.15f, 1.00f);
-	style.Colors[ImGuiCol_PlotLines] = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);
-	style.Colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
-	style.Colors[ImGuiCol_PlotHistogram] = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
-	style.Colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
-	style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.26f, 0.59f, 0.98f, 0.35f);
-	style.Colors[ImGuiCol_DragDropTarget] = ImVec4(0.11f, 0.64f, 0.92f, 1.00f);
-	style.Colors[ImGuiCol_NavHighlight] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
-	style.Colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
-	style.Colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
-	style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
+	// Headers (tree nodes, selectable): frosted sapphire
+	style.Colors[ImGuiCol_Header] = ImVec4(0.10f, 0.16f, 0.26f, 0.80f);
+	style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.14f, 0.22f, 0.34f, 0.88f);
+	style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.12f, 0.26f, 0.42f, 0.95f);
 
+	// Accent elements: sapphire blue
+	style.Colors[ImGuiCol_CheckMark] = ImVec4(0.26f, 0.56f, 0.92f, 1.00f);
+	style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.26f, 0.56f, 0.92f, 0.90f);
+	style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.30f, 0.62f, 0.96f, 1.00f);
+
+	// Separators: subtle sapphire line
+	style.Colors[ImGuiCol_Separator] = ImVec4(0.12f, 0.18f, 0.28f, 0.50f);
+	style.Colors[ImGuiCol_SeparatorHovered] = ImVec4(0.22f, 0.34f, 0.50f, 0.60f);
+	style.Colors[ImGuiCol_SeparatorActive] = ImVec4(0.26f, 0.46f, 0.72f, 0.80f);
+
+	// Resize grip: transparent sapphire
+	style.Colors[ImGuiCol_ResizeGrip] = ImVec4(0.26f, 0.56f, 0.92f, 0.00f);
+	style.Colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.26f, 0.56f, 0.92f, 0.40f);
+	style.Colors[ImGuiCol_ResizeGripActive] = ImVec4(0.26f, 0.56f, 0.92f, 0.70f);
+
+	// Tabs: deep navy inactive, sapphire active
+	style.Colors[ImGuiCol_Tab] = ImVec4(0.06f, 0.07f, 0.10f, 0.85f);
+	style.Colors[ImGuiCol_TabHovered] = ImVec4(0.16f, 0.26f, 0.42f, 0.90f);
+	style.Colors[ImGuiCol_TabActive] = ImVec4(0.12f, 0.20f, 0.34f, 1.00f);
+	style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.05f, 0.06f, 0.08f, 0.80f);
+	style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.08f, 0.10f, 0.15f, 0.90f);
+
+	// Plots
+	style.Colors[ImGuiCol_PlotLines] = ImVec4(0.36f, 0.46f, 0.60f, 1.00f);
+	style.Colors[ImGuiCol_PlotLinesHovered] = ImVec4(0.92f, 0.40f, 0.36f, 1.00f);
+	style.Colors[ImGuiCol_PlotHistogram] = ImVec4(0.26f, 0.56f, 0.92f, 1.00f);
+	style.Colors[ImGuiCol_PlotHistogramHovered] = ImVec4(0.36f, 0.66f, 0.96f, 1.00f);
+
+	style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.26f, 0.46f, 0.72f, 0.40f);
+	style.Colors[ImGuiCol_DragDropTarget] = ImVec4(0.26f, 0.56f, 0.92f, 0.90f);
+	style.Colors[ImGuiCol_NavHighlight] = ImVec4(0.26f, 0.56f, 0.92f, 1.00f);
+	style.Colors[ImGuiCol_NavWindowingHighlight] = ImVec4(0.80f, 0.84f, 0.92f, 0.50f);
+	style.Colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.06f, 0.08f, 0.12f, 0.60f);
+	style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.06f, 0.08f, 0.12f, 0.70f);
+
+	// Refined spacing and rounding for the premium feel
 	style.FrameBorderSize = 1.0f;
 	style.ChildBorderSize = 1.0f;
-	style.WindowPadding = ImVec2(12.0f, 12.0f);
-	style.FramePadding = ImVec2(8.0f, 5.0f);
+	style.WindowPadding = ImVec2(14.0f, 14.0f);
+	style.FramePadding = ImVec2(10.0f, 5.0f);
 	style.ItemSpacing = ImVec2(8.0f, 6.0f);
 	style.ItemInnerSpacing = ImVec2(6.0f, 4.0f);
-	style.ScrollbarSize = 12.0f;
+	style.ScrollbarSize = 10.0f;
 
-	// Keep the surface compact and consistent across Linux and Windows.
-	style.WindowRounding = 6.0f;
-	style.ChildRounding = 4.0f;
-	style.FrameRounding = 3.0f;
-	style.PopupRounding = 4.0f;
-	style.GrabRounding = 2.0f;
+	// Smooth, rounded edges for the liquid glass aesthetic
+	style.WindowRounding = 10.0f;
+	style.ChildRounding = 8.0f;
+	style.FrameRounding = 6.0f;
+	style.PopupRounding = 8.0f;
+	style.GrabRounding = 4.0f;
 
 	auto& io = ImGui::GetIO();
 

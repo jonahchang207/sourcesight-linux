@@ -414,3 +414,15 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Kernel mouse driver build artifacts (drivers/)
+drivers/*.ko
+drivers/*.o
+drivers/*.mod
+drivers/*.mod.c
+drivers/*.mod.o
+drivers/*.cmd
+drivers/.*.cmd
+drivers/Module.symvers
+drivers/Module.markers
+drivers/modules.order

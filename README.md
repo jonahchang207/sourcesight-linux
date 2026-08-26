@@ -26,7 +26,7 @@ Use CS2's fullscreen-windowed mode. Press `Insert` to toggle the menu and `End` 
 - External, read-only ESP: box, skeleton, head tracker, health, armor, name, money, weapon, ammo, ping, and team/enemy flags
 - Bomb ESP, radar, spectator list, and velocity graph
 - AWP quickswitch macro: with the AWP equipped, left-click automatically taps `3` (knife), waits the configured delay, then taps `1` to cancel the bolt animation
-- Bullet tracers: when a player fires, a short fading line is drawn along their aim direction (own shots and enemies, team colors, configurable length/duration/thickness)
+- Bullet tracers: when a player fires, a line is drawn from the gun tip to the impact point (first player hit), kept visible for 5 seconds, and only rendered while the shooter is in your line of sight (own shots and enemies, team colors, configurable length/duration/thickness)
 - Automatic offset scanning to stay compatible through game updates
 - Click-based UI (Dear ImGui) with streamproof and watermark options
 - Builds on Windows (Visual Studio) and Linux (CMake)
@@ -37,6 +37,81 @@ Use CS2's fullscreen-windowed mode. Press `Insert` to toggle the menu and `End` 
 
 - **Detection Status:** This project is intended solely for single-player use. That said, no ban reports have been raised for other modes.
 - **Anti-Virus Alerts:** This software may resemble malware in behavior because it accesses other processes' memory, so it is commonly flagged by anti-virus programs. Read the source code and build it yourself — all binaries are compiled via the [GitHub workflows](.github/workflows/) from this repository's source.
+
+## 🎯 Aim & kernel mouse driver
+
+The `aim` feature moves the real cursor toward a target screen point through a
+kernel-level virtual mouse (`/dev/person-mouse`), vendored from the
+CS2AiAimbot/Nod project (driver interface kept byte-identical). It injects
+relative input at the kernel input-subsystem level, bypassing the compositor,
+so it works under Wayland and in pointer-locked games that grab raw input.
+
+### Install the driver (once)
+
+```bash
+sudo ./drivers/install.sh   # builds person_mouse.ko, installs udev rules, loads it
+# log out and back in so your user receives the person-mouse group
+```
+
+The device accepts `dx dy` (relative movement, bounded to ±8192) and `click`
+(left button). Without it, aiming is unavailable and the rest of SourceSight
+works normally.
+
+### Movement algorithms
+
+The aim controller (`src/core/input/MouseAim.cpp`) drives the kernel mouse
+with one of four configurable, frame-rate-independent algorithms:
+
+| algorithm      | behaviour |
+| --- | --- |
+| `snap` | one exact correction to the target (clamped per tick) |
+| `proportional` | first-order: move a fraction of the remaining error each tick (`gain`, 1/s) |
+| `exponential` | dt-independent EMA of the target (`smooth`, 1/s) — monotonic, no overshoot |
+| `damped` (default) | critically damped spring (`omega`, rad/s) — zero overshoot with natural ease-in/out |
+
+All algorithms share: a per-axis deadzone, a pixel-per-second **aim speed**
+cap (`speed`) plus a hard per-tick ceiling (`max_delta`), and an FOV ring —
+targets farther than `fov_radius` from the cursor/crosshair are ignored. The
+lock is **vision-aware**: it prefers targets in line of sight (occlusion is
+tested against other players' bodies), and the pursued head is drawn on the
+overlay **magenta when visible, cyan when hidden**. The cursor position is
+tracked locally from the deltas sent and only re-queried from Hyprland ~4x/s,
+instead of spawning `hyprctl` for every correction. `game_mode` switches the
+reference point from the desktop cursor to the screen centre for
+pointer-locked games (the crosshair). MB5 (side button) toggles the aim
+on/off mid-game without opening the menu (`hotkey`).
+
+Targets are fed with `MouseAim::SetTarget(x, y)`. With `aim_at_enemies`
+enabled, the controller auto-selects the nearest alive enemy inside the FOV
+ring by reading the player's **head bone position from memory** and projecting
+it to screen coordinates through the view matrix — no capture backend
+required. A **magenta scanner** (`grim` capture + blob detection) can instead
+aim at the nearest pink-coloured region in the FOV ring, e.g. CS2
+colorblind-assist magenta outlines; it takes over target selection while
+enabled. The FOV ring itself scales from a single point to the full monitor.
+The Aim tab shows a live driver status line (green when `/dev/person-mouse`
+is ready, red with the install command when it is not), so a missing driver
+is impossible to miss.
+
+### Config (`config.json` → `aim`)
+
+```jsonc
+"aim": {
+    "enabled": false,        // master switch — nothing moves while false
+    "game_mode": false,      // true: reference the screen centre (CS2 pointer lock)
+    "aim_at_enemies": true,  // auto-pick nearest enemy inside FOV from ESP data
+    "algorithm": "damped",  // snap | proportional | exponential | damped
+    "deadzone": 3.0,         // per-axis jitter threshold (px)
+    "gain": 6.0,             // proportional rate (1/s)
+    "smooth": 8.0,           // exponential EMA rate (1/s)
+    "omega": 12.0,           // damped spring frequency (rad/s)
+    "max_delta": 500.0,      // max correction per tick (px)
+    "fov_radius": 400.0      // ignore targets beyond this radius (px)
+}
+```
+
+> Aiming generates real mouse movement. Keep `enabled` off unless you are in
+> an environment where input automation is allowed.
 
 ## 🛠️ Developer Instructions
 

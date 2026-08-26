@@ -6,9 +6,21 @@ build_dir="${repo_dir}/build"
 config_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/hypr"
 rules_file="${config_dir}/sourcesight.conf"
 
-sudo pacman -S --needed --noconfirm base-devel cmake curl glfw-x11 libx11 libxrandr mesa ttf-dejavu
+sudo pacman -S --needed --noconfirm base-devel cmake curl glfw-x11 libx11 libxrandr mesa ttf-dejavu linux-headers
 cmake -S "${repo_dir}" -B "${build_dir}" -DCMAKE_BUILD_TYPE=Release
 cmake --build "${build_dir}" --parallel
+
+# Optional: kernel-level virtual mouse used by the aim feature.
+# Builds and loads /dev/person-mouse, then requires a re-login.
+if [[ -x "${repo_dir}/drivers/install.sh" ]] && [[ -c /dev/person-mouse ]]; then
+    echo "person-mouse driver already loaded (/dev/person-mouse present)"
+elif [[ -x "${repo_dir}/drivers/install.sh" ]]; then
+    echo ""
+    echo "Kernel mouse driver not installed yet. To enable the aim feature, run:"
+    echo "  sudo ${repo_dir}/drivers/install.sh"
+    echo "then log out and back in."
+    echo ""
+fi
 
 mkdir -p "${config_dir}"
 

@@ -58,7 +58,8 @@ bool Config::ReadImpl() {
 			const auto& bt = data["esp"]["bullet_tracer"];
 			cfg::esp::bullet_tracer::enabled = bt.value("enabled", false);
 			cfg::esp::bullet_tracer::length = bt.value("length", 300.0f);
-			cfg::esp::bullet_tracer::duration = bt.value("duration", 0.12f);
+			cfg::esp::bullet_tracer::duration = bt.value("duration", 5.0f);
+			cfg::esp::bullet_tracer::muzzle_offset = bt.value("muzzle_offset", 45.0f);
 			cfg::esp::bullet_tracer::thickness = bt.value("thickness", 1.5f);
 			cfg::esp::bullet_tracer::team = JsonToColor(bt, "team", { 0.f, 1.f, 0.5f, 0.6f });
 			cfg::esp::bullet_tracer::enemy = JsonToColor(bt, "enemy", { 1.f, 0.3f, 0.3f, 0.6f });
@@ -163,6 +164,19 @@ bool Config::ReadImpl() {
 			cfg::macro::awp_quickswitch = data["macro"].value("awp_quickswitch", false);
 			cfg::macro::delay_ms = data["macro"].value("delay_ms", 100);
 		}
+
+		// aim (kernel mouse aiming)
+		if (data.contains("aim")) {
+			const auto& aim = data["aim"];
+			cfg::aim::enabled = aim.value("enabled", false);
+			cfg::aim::game_mode = aim.value("game_mode", false);
+			cfg::aim::aim_at_enemies = aim.value("aim_at_enemies", true);
+			cfg::aim::deadzone = aim.value("deadzone", 3.0f);
+			cfg::aim::max_delta = aim.value("max_delta", 500.0f);
+			cfg::aim::speed = aim.value("speed", 800.0f);			cfg::aim::hotkey = aim.value("hotkey", true);
+			cfg::aim::target_part = aim.value("target_part", 3);
+			cfg::aim::fov_radius = aim.value("fov_radius", 350.0f);
+		}
 	}
 	catch (const std::exception& e) {
 		LOGF(FATAL, "Failed to parse configuration");
@@ -204,6 +218,7 @@ bool Config::WriteImpl() {
 	data["esp"]["bullet_tracer"]["enabled"] = cfg::esp::bullet_tracer::enabled;
 	data["esp"]["bullet_tracer"]["length"] = cfg::esp::bullet_tracer::length;
 	data["esp"]["bullet_tracer"]["duration"] = cfg::esp::bullet_tracer::duration;
+	data["esp"]["bullet_tracer"]["muzzle_offset"] = cfg::esp::bullet_tracer::muzzle_offset;
 	data["esp"]["bullet_tracer"]["thickness"] = cfg::esp::bullet_tracer::thickness;
 	ColorToJson(data["esp"]["bullet_tracer"], "team", cfg::esp::bullet_tracer::team);
 	ColorToJson(data["esp"]["bullet_tracer"], "enemy", cfg::esp::bullet_tracer::enemy);
@@ -303,6 +318,17 @@ bool Config::WriteImpl() {
 	// macro
 	data["macro"]["awp_quickswitch"] = cfg::macro::awp_quickswitch;
 	data["macro"]["delay_ms"] = cfg::macro::delay_ms;
+
+	// aim (kernel mouse aiming)
+	data["aim"]["enabled"] = cfg::aim::enabled;
+	data["aim"]["game_mode"] = cfg::aim::game_mode;
+	data["aim"]["aim_at_enemies"] = cfg::aim::aim_at_enemies;
+	data["aim"]["deadzone"] = cfg::aim::deadzone;
+	data["aim"]["max_delta"] = cfg::aim::max_delta;
+	data["aim"]["speed"] = cfg::aim::speed;
+	data["aim"]["hotkey"] = cfg::aim::hotkey;
+	data["aim"]["target_part"] = cfg::aim::target_part;
+	data["aim"]["fov_radius"] = cfg::aim::fov_radius;
 
 	f << std::setw(4) << data << std::endl;
 	f.close();
