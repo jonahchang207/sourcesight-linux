@@ -18,6 +18,10 @@ using DWORD64 = std::uint64_t;
 using WORD = std::uint16_t;
 using byte = unsigned char;
 using LPVOID = void*;
+struct RECT { long left, top, right, bottom; };
+#ifndef __forceinline
+#define __forceinline inline __attribute__((always_inline))
+#endif
 #endif
 
 #include <map>
