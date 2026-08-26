@@ -32,7 +32,7 @@ public:
 
 struct ProcessModule
 {
-	uintptr_t base, size;
+	uintptr_t base{}, size{};
 };
 
 class pProcess
@@ -93,7 +93,8 @@ public:
 		pMemory cMemory;
 		cMemory.pfnNtWriteVirtualMemory(handle_, (void*)address, &value, sizeof(T), 0);
 #else
-		write_raw_linux(address, &value, sizeof(T));
+		(void)address;
+		(void)value;
 #endif
 	}
 
@@ -111,26 +112,26 @@ public:
 		pMemory cMemory;
 		cMemory.pfnNtWriteVirtualMemory(handle_, (void*)addr, &patch[0], patch.size(), 0);
 #else
-		if (!patch.empty()) write_raw_linux(addr, patch.data(), patch.size());
+		(void)addr;
+		(void)patch;
 #endif
 	}
 
-	uintptr_t read_multi_address(uintptr_t ptr, std::vector<uintptr_t> offsets)
+	uintptr_t read_multi_address(uintptr_t ptr, const std::vector<uintptr_t>& offsets)
 	{
 		uintptr_t buffer = ptr;
-		for (int i = 0; i < offsets.size(); i++)
-			buffer = this->read<uintptr_t>(buffer + offsets[i]);
+		for (const auto offset : offsets)
+			buffer = this->read<uintptr_t>(buffer + offset);
 
 		return buffer;
 	}
 
 	template <typename T>
-	T read_multi(uintptr_t base, std::vector<uintptr_t> offsets) {
+	T read_multi(uintptr_t base, const std::vector<uintptr_t>& offsets) {
+		if (offsets.empty()) return T{};
 		uintptr_t buffer = base;
-		for (int i = 0; i < offsets.size() - 1; i++)
-		{
+		for (size_t i = 0; i + 1 < offsets.size(); ++i)
 			buffer = this->read<uintptr_t>(buffer + offsets[i]);
-		}
 		return this->read<T>(buffer + offsets.back());
 	}
 
@@ -141,7 +142,6 @@ private:
 	HWND GetWindowHandleFromProcessId(DWORD ProcessId);
 #else
 	bool read_raw_linux(uintptr_t address, void* buffer, size_t size) const;
-	bool write_raw_linux(uintptr_t address, const void* buffer, size_t size) const;
 #endif
 };
 #endif

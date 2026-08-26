@@ -1,6 +1,8 @@
 # Contributing
 
-Thanks for your interest in improving **SourceSight**.
+Thanks for your interest in **SourceSight**.
+
+This repository is maintained by Jonah Chang (`jonahchang207`). It is not accepting pull requests, patches, or other external code contributions. Issues may be used for private maintainer tracking only; no additional GitHub contributors are authorized for this repository.
 
 ## What this project is
 
@@ -28,25 +30,15 @@ When in doubt, ask before submitting.
 
 ## Code Quality Requirements
 
-We expect contributions to be:
+Changes made by the maintainer should be:
 
-- **No "AI slop"**
 - Clean, readable, and maintainable
 - Consistent with the existing project structure and coding style
-- Properly implemented,working/compiling at the time of making the pr
+- Properly implemented and compiling before publication
 
 ## Branching and Pull Requests
 
-There is no separate development branch. All pull requests target `main`.
-
-### PR workflow
-
-1. Create your branch and open a PR against `main`.
-2. Before opening the PR, update your branch with the latest changes from `main` so the PR includes current `main` state.
-3. Ensure the code compiles and works in the PR state after updating from `main`. 
-4. Make sure the PR improves the project (bug fixes, refactors with clear value, or new ESP features within the allowed scope).
-5. Address review feedback promptly.
-6. Maintainers will only merge when the PR is ready.
+Pull requests and external patches are disabled for this repository. Jonah Chang (`jonahchang207`) is the sole maintainer and authorized contributor.
 
 
 ## ESP-Only Scope
@@ -56,12 +48,6 @@ New functionality must stay within ESP-only, read-only behavior.
 - ESP features are allowed
 - Anything that resembles writing memory or gameplay assistance is not allowed
 
-## Submitting Your Contribution
+## Maintainer Changes
 
-Open a pull request with:
-
-- A clear description of what you changed and why
-- Any relevant screenshots/logs
-- Notes on testing performed
-
-Thanks again, please keep contributions focused, correct, and respectful of game and third-party rules.
+Jonah Chang records implementation details, screenshots/logs, and testing notes with maintainer changes as appropriate.

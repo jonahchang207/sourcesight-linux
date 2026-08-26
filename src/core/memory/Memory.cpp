@@ -160,7 +160,7 @@ uintptr_t pProcess::FindSignature(std::vector<uint8_t> signature)
 		return 0x0;
 	}
 
-	for (uintptr_t i = 0; i < this->base_client_.size; i++)
+	for (uintptr_t i = 0; i + signature.size() <= this->base_client_.size; i++)
 	{
 		for (uintptr_t j = 0; j < signature.size(); j++)
 		{
@@ -181,28 +181,22 @@ uintptr_t pProcess::FindSignature(std::vector<uint8_t> signature)
 
 uintptr_t pProcess::FindSignature(ProcessModule target_module, std::vector<uint8_t> signature)
 {
-	std::unique_ptr<uint8_t[]> data;
-	data = std::make_unique<uint8_t[]>(0xFFFFFFF);
+	if (!target_module.base || !target_module.size || signature.empty() || signature.size() > target_module.size)
+		return 0x0;
 
-	if (!ReadProcessMemory(this->handle_, (void*)(target_module.base), data.get(), 0xFFFFFFF, NULL)) {
-		return NULL;
-	}
+	std::unique_ptr<uint8_t[]> data = std::make_unique<uint8_t[]>(target_module.size);
+	if (!ReadProcessMemory(this->handle_, reinterpret_cast<void*>(target_module.base), data.get(), target_module.size, nullptr))
+		return 0x0;
 
-	for (uintptr_t i = 0; i < 0xFFFFFFF; i++)
-	{
-		for (uintptr_t j = 0; j < signature.size(); j++)
-		{
-			if (signature.at(j) == 0x00)
-				continue;
-
-			if (*reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(&data[i + j])) == signature.at(j))
-			{
-				if (j == signature.size() - 1)
-					return this->base_client_.base + i;
-				continue;
+	for (uintptr_t i = 0; i + signature.size() <= target_module.size; ++i) {
+		bool match = true;
+		for (size_t j = 0; j < signature.size(); ++j) {
+			if (signature[j] && signature[j] != data[i + j]) {
+				match = false;
+				break;
 			}
-			break;
 		}
+		if (match) return target_module.base + i;
 	}
 	return 0x0;
 }
@@ -241,6 +235,24 @@ std::string basename_of(std::string path) {
     const auto slash = path.find_last_of('/');
     return slash == std::string::npos ? path : path.substr(slash + 1);
 }
+
+bool parse_mapping(const std::string& line, uintptr_t& begin, uintptr_t& end, char& permissions) {
+    std::istringstream stream(line);
+    std::string range;
+    std::string permission_string;
+    if (!(stream >> range >> permission_string)) return false;
+
+    const auto separator = range.find('-');
+    if (separator == std::string::npos) return false;
+    try {
+        begin = std::stoull(range.substr(0, separator), nullptr, 16);
+        end = std::stoull(range.substr(separator + 1), nullptr, 16);
+    } catch (const std::exception&) {
+        return false;
+    }
+    permissions = permission_string.empty() ? '-' : permission_string.front();
+    return begin < end;
+}
 }
 
 uint32_t pProcess::FindProcessIdByProcessName(const char* process_name) {
@@ -248,7 +260,9 @@ uint32_t pProcess::FindProcessIdByProcessName(const char* process_name) {
     const std::string wanted_base = basename_of(wanted);
     for (const auto& entry : std::filesystem::directory_iterator("/proc")) {
         const auto name = entry.path().filename().string();
-        if (name.empty() || !std::all_of(name.begin(), name.end(), ::isdigit)) continue;
+        if (name.empty() || !std::all_of(name.begin(), name.end(), [](const char character) {
+            return std::isdigit(static_cast<unsigned char>(character));
+        })) continue;
         std::ifstream comm(entry.path() / "comm");
         std::string actual;
         std::getline(comm, actual);
@@ -265,8 +279,10 @@ bool pProcess::AttachProcess(const char* process_name) {
     base_client_ = GetModule("libclient.so");
     if (!base_client_.base) base_client_ = GetModule("client.so");
     if (!base_client_.base) {
-        pid_ = 0;
-        return false;
+        // The process can exist briefly before its game libraries are mapped.
+        // Let AwaitModules poll instead of reporting a permissions failure.
+        handle_ = 1;
+        return true;
     }
 
     std::uint8_t probe{};
@@ -293,11 +309,12 @@ ProcessModule pProcess::GetModule(const char* module_name) {
         const std::string path = line.substr(path_pos);
         if (basename_of(path) != module_name) continue;
         uintptr_t begin{}, end{};
-        if (std::sscanf(line.c_str(), "%lx-%lx", &begin, &end) != 2) continue;
+        char permissions{};
+        if (!parse_mapping(line, begin, end, permissions)) continue;
         first = std::min(first, begin);
         last = std::max(last, end);
     }
-    if (!last) return {};
+    if (last == 0 || first == std::numeric_limits<uintptr_t>::max()) return {};
     return {first, last - first};
 }
 
@@ -305,12 +322,6 @@ bool pProcess::read_raw_linux(uintptr_t address, void* buffer, size_t size) cons
     iovec local{buffer, size};
     iovec remote{reinterpret_cast<void*>(address), size};
     return process_vm_readv(pid_, &local, 1, &remote, 1, 0) == static_cast<ssize_t>(size);
-}
-
-bool pProcess::write_raw_linux(uintptr_t address, const void* buffer, size_t size) const {
-    iovec local{const_cast<void*>(buffer), size};
-    iovec remote{reinterpret_cast<void*>(address), size};
-    return process_vm_writev(pid_, &local, 1, &remote, 1, 0) == static_cast<ssize_t>(size);
 }
 
 LPVOID pProcess::Allocate(size_t) { return nullptr; }
@@ -321,16 +332,53 @@ uintptr_t pProcess::FindSignature(std::vector<uint8_t> signature) {
 
 uintptr_t pProcess::FindSignature(ProcessModule module, std::vector<uint8_t> signature) {
     if (!module.base || !module.size || signature.empty()) return 0;
+
+    std::string module_name;
+    for (const char* candidate : {"libclient.so", "client.so", "libengine2.so", "engine2.so"}) {
+        const auto candidate_module = GetModule(candidate);
+        if (candidate_module.base == module.base && candidate_module.size == module.size) {
+            module_name = candidate;
+            break;
+        }
+    }
+    if (module_name.empty()) return 0;
+
+    std::ifstream maps("/proc/" + std::to_string(pid_) + "/maps");
+    std::string line;
     constexpr size_t chunk_size = 1024 * 1024;
-    std::vector<uint8_t> data(chunk_size + signature.size());
-    for (uintptr_t offset = 0; offset < module.size; offset += chunk_size) {
-        const auto amount = std::min<size_t>(data.size(), module.size - offset);
-        if (!read_raw(module.base + offset, data.data(), amount)) continue;
-        for (size_t i = 0; i + signature.size() <= amount; ++i) {
-            bool match = true;
-            for (size_t j = 0; j < signature.size(); ++j)
-                if (signature[j] && signature[j] != data[i + j]) { match = false; break; }
-            if (match) return module.base + offset + i;
+    const size_t overlap = signature.size() - 1;
+    std::vector<uint8_t> data(chunk_size + overlap);
+
+    while (std::getline(maps, line)) {
+        const auto path_pos = line.find('/');
+        if (path_pos == std::string::npos || basename_of(line.substr(path_pos)) != module_name) continue;
+
+        uintptr_t mapping_begin{}, mapping_end{};
+        char permissions{};
+        if (!parse_mapping(line, mapping_begin, mapping_end, permissions) || permissions != 'r') continue;
+
+        const uintptr_t range_begin = std::max(mapping_begin, module.base);
+        const uintptr_t range_end = std::min(mapping_end, module.base + module.size);
+        if (range_begin >= range_end) continue;
+
+        for (uintptr_t address = range_begin; address < range_end;) {
+            const size_t amount = std::min<size_t>(data.size(), range_end - address);
+            if (!read_raw(address, data.data(), amount)) break;
+
+            const size_t searchable = amount >= signature.size() ? amount - signature.size() + 1 : 0;
+            for (size_t i = 0; i < searchable; ++i) {
+                bool match = true;
+                for (size_t j = 0; j < signature.size(); ++j) {
+                    if (signature[j] && signature[j] != data[i + j]) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) return address + i;
+            }
+
+            if (amount <= overlap) break;
+            address += amount - overlap;
         }
     }
     return 0;

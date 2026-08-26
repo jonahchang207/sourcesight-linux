@@ -116,11 +116,20 @@ DWORD64 Dumper::Scan(const std::string sig, ProcessModule module) {
     DWORD64 address = 0;
     std::vector<DWORD64> list;
 
-    //list = process->FindSignature(module, sig.data());
     if (!module.base || !module.size)
         return 0;
 
+#ifdef _WIN32
     list = ScanMemory(sig, module.base, module.base + module.size);
+#else
+    std::vector<uint8_t> signature;
+    for (const auto byte : StrSigToArray(sig))
+        signature.push_back(byte == 256 ? 0 : static_cast<uint8_t>(byte));
+
+    const auto match = process->FindSignature(module, std::move(signature));
+    if (match)
+        list.push_back(match);
+#endif
 
     if (!list.size())
         return 0;
@@ -192,7 +201,7 @@ std::vector<DWORD64> Dumper::ScanMemory(const std::string& sig, DWORD64 start, D
     if (!process)
         return result;
 
-    byte* buffer = new byte[MAX_BLOCK_SIZE];
+    std::unique_ptr<byte[]> buffer = std::make_unique<byte[]>(MAX_BLOCK_SIZE);
 
     auto signature = StrSigToArray(sig);
     if (!signature.size())
@@ -210,16 +219,15 @@ std::vector<DWORD64> Dumper::ScanMemory(const std::string& sig, DWORD64 start, D
         while (size >= MAX_BLOCK_SIZE)
         {
             if (result.size() >= number) {
-                delete[] buffer;
-	            return result;
+                return result;
 	        }
-            ScanBlock(buffer, next, signature, start + (MAX_BLOCK_SIZE * searches), MAX_BLOCK_SIZE, result);
+            ScanBlock(buffer.get(), next, signature, start + (MAX_BLOCK_SIZE * searches), MAX_BLOCK_SIZE, result);
 
             size -= MAX_BLOCK_SIZE;
             searches++;
         }
 
-        ScanBlock(buffer, next, signature, start + (MAX_BLOCK_SIZE * searches), size, result);
+        ScanBlock(buffer.get(), next, signature, start + (MAX_BLOCK_SIZE * searches), size, result);
 
         start += mbi.RegionSize;
 
@@ -230,12 +238,11 @@ std::vector<DWORD64> Dumper::ScanMemory(const std::string& sig, DWORD64 start, D
 	while (start < end)
 	{
 		const auto size = static_cast<DWORD>(std::min<DWORD64>(MAX_BLOCK_SIZE, end - start));
-		ScanBlock(buffer, next, signature, start, size, result);
+		ScanBlock(buffer.get(), next, signature, start, size, result);
 		if (result.size() >= static_cast<size_t>(number)) break;
 		start += size;
 	}
 #endif
 
-	delete[] buffer;
 	return result;
 }

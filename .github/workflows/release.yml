@@ -1,10 +1,10 @@
-name: Build and release
+name: Build artifacts
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   windows:
@@ -25,10 +25,9 @@ jobs:
           Compress-Archive -Path package/* -DestinationPath sourcesight-windows-x64.zip
       - uses: actions/upload-artifact@v7
         with:
-          name: release-windows
+          name: sourcesight-windows-release
           path: sourcesight-windows-x64.zip
           if-no-files-found: error
-
   linux:
     runs-on: ubuntu-latest
     container: archlinux:base-devel
@@ -46,23 +45,6 @@ jobs:
         run: tar -czf sourcesight-linux-x64.tar.gz -C build sourcesight -C .. README.md LICENSE scripts/install-omarchy.sh
       - uses: actions/upload-artifact@v7
         with:
-          name: release-linux
+          name: sourcesight-linux-release
           path: sourcesight-linux-x64.tar.gz
           if-no-files-found: error
-
-  release:
-    needs: [windows, linux]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: release-*
-          path: release
-          merge-multiple: true
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: release-${{ github.run_number }}
-          name: SourceSight release ${{ github.run_number }}
-          generate_release_notes: true
-          files: release/*
