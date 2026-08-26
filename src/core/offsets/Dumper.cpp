@@ -105,6 +105,48 @@ bool Dumper::InitImpl() {
     return true;
 }
 
+bool Dumper::RescanEntityList() {
+    auto process = Engine::GetProcess();
+    auto client = Engine::GetClient();
+
+    if (!process || !client.base)
+        return false;
+
+    Dumper& d = GetInstance();
+
+    // Try the original pattern first
+    DWORD64 temp = d.Scan(offsets::signatures::entityList, client);
+    if (temp) {
+        offsets::entityList = temp - client.base;
+        LOGF(INFO, "[dumper] entity list re-scanned: offset=0x{:X}", offsets::entityList);
+        return true;
+    }
+
+    // Fallback: try alternative patterns commonly seen in CS2 builds
+    const offsets::signatures::Signature alt1 = {
+        "48 8B 3D ?? ?? ?? ?? 48 85 FF 74", 3, 7
+    };
+    temp = d.Scan(alt1, client);
+    if (temp) {
+        offsets::entityList = temp - client.base;
+        LOGF(INFO, "[dumper] entity list found with alt pattern: offset=0x{:X}", offsets::entityList);
+        return true;
+    }
+
+    const offsets::signatures::Signature alt2 = {
+        "48 8B 1D ?? ?? ?? ?? 48 85 DB 74", 3, 7
+    };
+    temp = d.Scan(alt2, client);
+    if (temp) {
+        offsets::entityList = temp - client.base;
+        LOGF(INFO, "[dumper] entity list found with alt2 pattern: offset=0x{:X}", offsets::entityList);
+        return true;
+    }
+
+    LOGF(WARNING, "[dumper] entity list re-scan failed — all patterns exhausted");
+    return false;
+}
+
 DWORD64 Dumper::Scan(const offsets::signatures::Signature& sig, ProcessModule module) {
     auto process = Engine::GetProcess();
 

@@ -18,6 +18,9 @@ public:
     // Writes skin overrides to all weapons held by the local player.
     static void Run();
 
+    // Force all active skins to be re-applied on the next tick.
+    static void ForceUpdate();
+
     // Get/set skin override for a weapon item definition index.
     static SkinOverride& Get(int item_index);
     static const std::unordered_map<int, SkinOverride>& GetAll();

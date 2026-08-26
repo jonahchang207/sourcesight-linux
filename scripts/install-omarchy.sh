@@ -35,9 +35,10 @@ hyprlang_rules="${config_dir}/sourcesight.conf"
 if [[ -f "${lua_conf}" ]]; then
     cat > "${lua_rules}" <<'LUA'
 -- SourceSight Linux ESP overlay: fullscreen transparent click-through surface.
--- Kept above CS2 (float + pin), never takes focus, no decorations/blur/anim.
+-- Kept above CS2, never takes focus, no decorations/blur/anim.
 o.window({ class = "^SourceSight Linux$" }, {
   float = true,
+  fullscreen = true,
   pin = true,
   no_focus = true,
   no_blur = true,

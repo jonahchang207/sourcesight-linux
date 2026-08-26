@@ -4,6 +4,7 @@
 #include "core/engine/cache/Cache.hpp"
 #include "core/engine/classes/Macro.hpp"
 #include "core/engine/classes/SkinChanger.hpp"
+#include "core/engine/classes/MapRaytrace.hpp"
 #include "core/input/MouseAim.hpp"
 
 bool Engine::Init() {
@@ -38,10 +39,10 @@ bool Engine::InitImpl() {
     if (!Dumper::Init()) {
         LOGF(FATAL, "Failed to dump game offsets");
         return false;
-    }
+    }	if (!Config::Read())
+		LOGF(WARNING, "Failed to parse config, using default values");
 
-    if (!Config::Read())
-        LOGF(WARNING, "Failed to parse config, using default values");
+	MapRaytrace::Init();
 
 #ifdef _DEBUG
     if (!cfg::dev::console)

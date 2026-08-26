@@ -13,6 +13,10 @@ public:
     Dumper& operator=(Dumper&&)      = delete;
 
    static bool Init();
+
+   // Re-scan a specific offset pattern.  Called when the initial offset
+   // returns null (stale pattern for a different CS2 build).
+   static bool RescanEntityList();
 private:
     Dumper() {};
 

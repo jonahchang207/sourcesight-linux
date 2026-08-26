@@ -158,6 +158,24 @@ void Esp::RenderImpl() {
 
 	this->matrix = game.view_matrix;
 
+	// Diagnostic: log on FIRST render, then every ~2 seconds.
+	static int esp_tick = 0;
+	esp_tick++;
+	static auto last_diag = std::chrono::steady_clock::now();
+	auto now_diag = std::chrono::steady_clock::now();
+	bool diag_now = (esp_tick <= 3) || (now_diag - last_diag > std::chrono::seconds(2));
+	if (diag_now) {
+		last_diag = now_diag;
+		int alive_count = 0, enemy_count = 0;
+		for (auto& p : players) {
+			if (p.alive) alive_count++;
+			if (p.alive && !p.localplayer && p.team != local.team) enemy_count++;
+		}
+		LOGF(INFO, "[esp] tick={} snap={} alive={} enemies={} local_hp={} vm_ok={}",
+			esp_tick, players.size(), alive_count, enemy_count, local.health,
+			(game.view_matrix[3][3] != 0.0f));
+	}
+
 	for (auto& player : players) {
 		if (!player.alive)
 			continue;

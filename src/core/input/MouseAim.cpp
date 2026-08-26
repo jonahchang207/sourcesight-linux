@@ -3,6 +3,7 @@
 #include "common.hpp"
 #include "core/engine/cache/Cache.hpp"
 #include "core/engine/classes/Player.hpp"
+#include "core/engine/classes/MapRaytrace.hpp"
 #include "core/input/AimHotkey.hpp"
 #include "gui/renderer/Renderer.hpp" // Menu-open guard (same as Macro.cpp)
 
@@ -360,6 +361,7 @@ bool MouseAim::SelectNearestEnemy() {
     float best_y = 0.0f;
     // When visible_only is on, only pass 0 runs (visible targets only).
     // When off, pass 0 = visible, pass 1 = hidden fallback.
+    // Visibility = game-traced LOS (spotted) AND no player blocking.
     const int max_passes = cfg::aim::visible_only ? 1 : 2;
     for (int pass = 0; pass < max_passes && best_index < 0; ++pass) {
         float best_dist = std::numeric_limits<float>::max();
@@ -378,8 +380,17 @@ bool MouseAim::SelectNearestEnemy() {
             const float dist_sq = dx * dx + dy * dy;
             if (dist_sq > fov_sq)
                 continue;
-            if (pass == 0 && HeadOccluded(eye, PlayerHeadWorld(player), cache.players, player.index))
-                continue;
+            // Pass 0: prefer targets that are visible (map raytrace + no player blocker).
+            if (pass == 0) {
+                const Vec3_t head = PlayerHeadWorld(player);
+                // 1) Map raytrace: is the path from eye to head blocked by world geometry?
+                const bool map_clear = MapRaytrace::IsVisible(
+                    {eye.x, eye.y, eye.z}, {head.x, head.y, head.z});
+                // 2) Player occlusion: is another player body-blocking the shot?
+                const bool no_player_block = !HeadOccluded(eye, head, cache.players, player.index);
+                if (!map_clear || !no_player_block)
+                    continue;
+            }
             if (dist_sq < best_dist) {
                 best_dist = dist_sq;
                 best_x = screen.x;
@@ -400,7 +411,10 @@ bool MouseAim::SelectNearestEnemy() {
 }
 
 void MouseAim::Update() {
-    g_hotkey.Sync(cfg::aim::hotkey && cfg::aim::enabled);
+    // Keep the hotkey listener alive whenever hotkey mode is enabled,
+    // regardless of aim state.  This lets MB5 re-enable aim after
+    // it was toggled off.
+    g_hotkey.Sync(cfg::aim::hotkey);
 
     // MB5 (side button) toggles aim on/off without opening the menu.
     if (g_hotkey.ConsumeToggle()) {
@@ -490,7 +504,10 @@ void MouseAim::Update() {
 
     auto& cache = Cache::Get();
 
-    // ── vision check: is the locked head in our line of sight? ───────
+    // ── vision check: map raytrace + player occlusion ───────────────
+    // Uses the parsed map collision mesh to cast a ray from our eye to
+    // the target's head. If the ray hits a wall/prop triangle, the
+    // target is behind cover. Also checks if another player is body-blocking.
     if (auto_target_ && locked_player_index_ >= 0) {
         bool found = false;
         Vec3_t head;
@@ -501,8 +518,15 @@ void MouseAim::Update() {
                 break;
             }
         }
-        target_visible_ = !found ||
-            !HeadOccluded(PlayerEye(cache.local), head, cache.players, locked_player_index_);
+        if (found) {
+            const Vec3_t eye = PlayerEye(cache.local);
+            const bool map_clear = MapRaytrace::IsVisible(
+                {eye.x, eye.y, eye.z}, {head.x, head.y, head.z});
+            const bool no_block = !HeadOccluded(eye, head, cache.players, locked_player_index_);
+            target_visible_ = map_clear && no_block;
+        } else {
+            target_visible_ = false;
+        }
     }
     else {
         target_visible_ = true;
@@ -555,28 +579,51 @@ void MouseAim::Update() {
     }
 
     // ── movement algorithm → desired position ───────────────────────
+    // Distance-based easing: fast when far, decelerates near target.
+    // This gives the snappy acquisition + smooth finish feel.
     float dx = target_x_ - ref_x;
     float dy = target_y_ - ref_y;
+    const float dist = std::sqrt(dx * dx + dy * dy);
+    if (dist < 0.5f)
+        return; // close enough — no movement needed
 
-    // ── speed caps: pixels/second ceiling plus a hard per-tick ceiling ──
-    const float base_speed = std::max(0.0f, cfg::aim::speed) * weapon_mult;
     const float max_delta = std::max(1.0f, cfg::aim::max_delta);
-    const float speed_cap = std::max(1.0f, base_speed * dt);
-    const float cap = std::min(max_delta, speed_cap);
-    const float length = std::sqrt(dx * dx + dy * dy);
-    if (length > cap) {
-        dx *= cap / length;
-        dy *= cap / length;
-    }
+    const float base_speed = std::max(0.0f, cfg::aim::speed) * weapon_mult;
+
+    // Normalised progress: 0 = at edge of FOV, 1 = on target.
+    // Capped to [0.05, 1] so there is always some movement when locked.
+    const float t = std::clamp(dist / fov, 0.05f, 1.0f);
+
+    // Ease-in-out cubic gives fast mid-range + soft landing.
+    float ease;
+    if (t < 0.5f)
+        ease = 4.0f * t * t * t;          // accelerate (0→0.5)
+    else
+        ease = 1.0f - std::pow(-2.0f * t + 2.0f, 3.0f) / 2.0f; // decelerate (0.5→1)
+
+    // Desired delta = speed × dt, scaled by easing.
+    float step = base_speed * dt * ease;
+
+    // Apply per-frame cap so close-range corrections stay tight.
+    step = std::min(step, max_delta);
+
+    // Scale to unit direction.
+    const float ndx = (dx / dist) * step;
+    const float ndy = (dy / dist) * step;
 
     // ── deadzone ───────────────────────────────────────────────────
     const float deadzone = std::max(0.0f, cfg::aim::deadzone);
-    if (std::fabs(dx) <= deadzone)
-        dx = 0.0f;
-    if (std::fabs(dy) <= deadzone)
-        dy = 0.0f;
-    if (dx == 0.0f && dy == 0.0f)
+    float move_x = ndx;
+    float move_y = ndy;
+    if (std::fabs(move_x) <= deadzone)
+        move_x = 0.0f;
+    if (std::fabs(move_y) <= deadzone)
+        move_y = 0.0f;
+    if (move_x == 0.0f && move_y == 0.0f)
         return;
+
+    dx = move_x;
+    dy = move_y;
 
     // ── bypass: add micro-noise to look human ──────────────────────
     if (cfg::bypass::humanize_movement) {

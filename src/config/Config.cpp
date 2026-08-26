@@ -1,4 +1,6 @@
 #include "Config.hpp"
+#include "core/engine/classes/SkinChanger.hpp"
+#include "core/engine/classes/SkinDatabase.hpp"
 
 bool Config::Read() {
 	return GetInstance().ReadImpl();
@@ -208,6 +210,19 @@ bool Config::ReadImpl() {
 		if (data.contains("audio")) {
 			cfg::audio::lock_sound = data["audio"].value("lock_sound", false);
 		}
+
+		// skins — load active skin overrides
+		if (data.contains("skins") && data["skins"].is_object()) {
+			for (auto& [key, val] : data["skins"].items()) {
+				int weapon_id = std::stoi(key);
+				auto& skin = SkinChanger::Get(weapon_id);
+				skin.paint_kit = val.value("paint_kit", 0);
+				skin.wear = val.value("wear", 0.0f);
+				skin.seed = val.value("seed", 0);
+				skin.stattrak = val.value("stattrak", -1);
+			}
+			SkinChanger::ForceUpdate();
+		}
 	}
 	catch (const std::exception& e) {
 		LOGF(FATAL, "Failed to parse configuration");
@@ -383,6 +398,21 @@ bool Config::WriteImpl() {
 
 	// audio
 	data["audio"]["lock_sound"] = cfg::audio::lock_sound;
+
+	// skins — save all active skin overrides
+	{
+		json skins_obj = json::object();
+		for (const auto& [id, skin] : SkinChanger::GetAll()) {
+			if (skin.paint_kit <= 0) continue;
+			json s;
+			s["paint_kit"] = skin.paint_kit;
+			s["wear"] = skin.wear;
+			s["seed"] = skin.seed;
+			s["stattrak"] = skin.stattrak;
+			skins_obj[std::to_string(id)] = s;
+		}
+		data["skins"] = skins_obj;
+	}
 
 	f << std::setw(4) << data << std::endl;
 	f.close();

@@ -2,6 +2,7 @@
 
 #include "core/engine/Engine.hpp" // Circular dep
 #include "core/offsets/Dumper.hpp"
+#include "core/engine/classes/MapRaytrace.hpp"
 
 bool Cache::Refresh() {
     return Get().RefreshImpl();
@@ -47,26 +48,51 @@ bool Cache::RefreshImpl() {
     globals.Update();
     bomb.Update();
 
+	// Auto-reload map geometry when the map changes
+	if (globals.map_name[0] != '\0') {
+		static std::string last_map;
+		std::string current_map(globals.map_name);
+		if (current_map != last_map) {
+			MapRaytrace::LoadMap(current_map);
+			last_map = current_map;
+		}
+	}
+
+    // Aggressive diagnostics: log on FIRST tick, then every ~3 seconds
+    static int cache_tick = 0;
+    cache_tick++;
+    static auto last_cache_diag = steady_clock::now();
+    auto now_cache_diag = steady_clock::now();
+    bool log_now = (cache_tick <= 5) || (now_cache_diag - last_cache_diag > 3s);
+    if (log_now) {
+        last_cache_diag = now_cache_diag;
+        LOGF(INFO, "[cache] tick={} el=0x{:X} le=0x{:X} mc={} map='{}' c4=0x{:X}",
+             cache_tick, game.entity_list, game.list_entry, globals.max_clients,
+             globals.map_name, bomb.carrier);
+    }
+
     std::vector<Player> scan;
     scan.reserve(globals.max_clients);
+    int failed_updates = 0;
     for (int i = 0; i < globals.max_clients; i++) {
         auto player = Player(i, game.entity_list, game.list_entry);
 
-        if (!player.Update())
-            continue;		if (player.localplayer)
-			this->local = player;
-
+        if (!player.Update()) {
+            failed_updates++;
+            continue;
+        }
+        if (player.localplayer)
+            this->local = player;
 
         player.has_c4 = bomb.carrier != 0 && player.pawn_controller_addr == bomb.carrier;
 
-        // TODO: Handle or at least alert, in case of multiple lp
-        //if (player.localplayer && (this->local.index == -1 || this->local.index == player.index))
-        //    this->local = player;
-        //else if (player.localplayer)
-        //    LOGF(FATAL, "Offset mismatch, initial({}) current({}); there is more than one local player, update needed", this->local.index, player.index);
-    
         scan.push_back(player);
-    }	players = std::move(scan);
+    }
+    if (log_now) {
+        LOGF(INFO, "[cache] players: {} succeeded, {} failed, max_clients={}"
+             , scan.size(), failed_updates, globals.max_clients);
+    }
+	players = std::move(scan);
 	duration = duration_cast<std::chrono::milliseconds>(steady_clock::now() - now);
 	last = now;
 

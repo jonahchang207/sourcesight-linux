@@ -7,6 +7,7 @@
 #include "gui/renderer/Renderer.hpp" // Circular dependency
 #include "gui/renderer/window/Window.hpp" // Circular dependency
 #include "assets/fonts/Icons.h"
+#include "assets/fonts/WeaponIcons.h"
 
 #include <cmath>
 
@@ -434,10 +435,8 @@ void Menu::RenderImpl() {
 				}
 				else if (active_tab == Tab::SKINS)
 				{
-					ImGui::Text("Skin Changer");
-					ImGui::Separator();
-					ImGui::TextWrapped("Select a weapon and skin to apply. Visual only — other players see default skins.");
-					ImGui::Spacing();
+					// ── Skin Changer: Grid Browser ─────────────────────────────────
+					// Layout: category tabs on top, weapon grid on left, skin config on right.
 
 					static int selected_weapon = WEAPON_AK47;
 					static int selected_skin = 0;
@@ -445,79 +444,250 @@ void Menu::RenderImpl() {
 					static int selected_seed = 0;
 					static int selected_stattrak = -1;
 					static bool stattrak_on = false;
+					static int skin_category = 0; // 0=All, 1=Rifles, 2=SMGs, 3=Shotguns, 4=Snipers, 5=Pistols, 6=Knives
 
-					// Weapon selector
-					const auto& weapons = SkinDB::Weapons();
-					if (ImGui::BeginCombo("Weapon", SkinDB::Weapons().count(selected_weapon)
-						? SkinDB::Weapons().at(selected_weapon).display_name : "AK-47")) {
-						for (const auto& [id, info] : weapons) {
-							bool is_selected = (selected_weapon == id);
-							if (ImGui::Selectable(info.display_name, is_selected))
-								selected_weapon = id;
-							if (is_selected)
-								ImGui::SetItemDefaultFocus();
-						}
-						ImGui::EndCombo();
+					// ── Category tabs ──────────────────────────────────────────────
+					static const char* categories[] = { "All", "Rifles", "SMGs", "Shotguns", "Snipers", "Pistols", "Knives" };
+					ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12, 5));
+					for (int c = 0; c < 7; ++c) {
+						if (c > 0) ImGui::SameLine(0, 4);
+						bool active = (skin_category == c);
+						if (active) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.28f, 0.46f, 0.90f));
+						if (ImGui::Button(categories[c])) skin_category = c;
+						if (active) ImGui::PopStyleColor();
 					}
-
-					// Skin selector
-					const auto& skins = SkinDB::PopularSkins();
-					if (ImGui::BeginCombo("Skin", skins[selected_skin].name)) {
-						for (int i = 0; i < static_cast<int>(skins.size()); ++i) {
-							bool is_selected = (selected_skin == i);
-							if (ImGui::Selectable(skins[i].name, is_selected))
-								selected_skin = i;
-							if (is_selected)
-								ImGui::SetItemDefaultFocus();
-						}
-						ImGui::EndCombo();
-					}
-
-					// Wear
-					ImGui::SliderFloat("Wear", &selected_wear, 0.0f, 1.0f, "%.2f");
-					ImGui::SameLine();
-					ImGui::TextColored(ImVec4(0.7f, 0.8f, 0.9f, 1.0f), "%s", SkinDB::WearName(selected_wear));
-
-					// Seed
-					ImGui::SliderInt("Seed", &selected_seed, 0, 1000);
-
-					// StatTrak
-					ImGui::Checkbox("StatTrak", &stattrak_on);
-					if (stattrak_on) {
-						if (selected_stattrak < 0) selected_stattrak = 0;
-						ImGui::SliderInt("Kills", &selected_stattrak, 0, 999999);
-					} else {
-						selected_stattrak = -1;
-					}
-
+					ImGui::PopStyleVar();
 					ImGui::Spacing();
 
-					// Apply button
-					if (ImGui::Button("Apply Skin", ImVec2(-1, 30))) {
-						auto& skin = SkinChanger::Get(selected_weapon);
-						skin.paint_kit = skins[selected_skin].paint_kit;
-						skin.wear = selected_wear;
-						skin.seed = selected_seed;
-						skin.stattrak = selected_stattrak;
-					}
+					// ── Weapon grid (left 60%) + Skin config (right 40%) ─────────
+					const float region_w = ImGui::GetContentRegionAvail().x;
+					const float grid_w = region_w * 0.58f;
+					const float config_w = region_w - grid_w - 8.0f;
 
-					// Reset button
-					if (ImGui::Button("Reset to Default", ImVec2(-1, 24))) {
-						SkinChanger::Get(selected_weapon) = SkinOverride{};
-					}
+					ImGui::BeginChild("##skin_grid", ImVec2(grid_w, 0), ImGuiChildFlags_Borders);
+					{
+						// Build weapon list for current category
+						struct WeaponCard { int id; const char* name; const char* icon; };
+						static const WeaponCard all_weapons[] = {
+							{ WEAPON_AK47,    "AK-47",       WeaponIcons::AK47 },
+							{ WEAPON_AWP,     "AWP",         WeaponIcons::AWP },
+							{ WEAPON_M4A4,    "M4A4",        WeaponIcons::M4A1 },
+							{ WEAPON_M4A1S,   "M4A1-S",      WeaponIcons::M4A1_SILENCER },
+							{ WEAPON_SSG08,   "SSG 08",      WeaponIcons::SSG08 },
+							{ WEAPON_AUG,     "AUG",         WeaponIcons::AUG },
+							{ WEAPON_SG553,   "SG 553",      WeaponIcons::SG556 },
+							{ WEAPON_FAMAS,   "FAMAS",       WeaponIcons::FAMAS },
+							{ WEAPON_GALIL,   "Galil AR",    WeaponIcons::GALILAR },
+							{ WEAPON_G3SG1,   "G3SG1",       WeaponIcons::G3SG1 },
+							{ WEAPON_SCAR20,  "SCAR-20",     WeaponIcons::SCAR20 },
+							{ WEAPON_MAC10,   "MAC-10",      WeaponIcons::MAC10 },
+							{ WEAPON_UMP45,   "UMP-45",      WeaponIcons::UMP45 },
+							{ WEAPON_MP7,     "MP7",         WeaponIcons::MP7 },
+							{ WEAPON_MP9,     "MP9",         WeaponIcons::MP9 },
+							{ WEAPON_P90,     "P90",         WeaponIcons::P90 },
+							{ WEAPON_MP5SD,   "MP5-SD",      WeaponIcons::MP7 },
+							{ WEAPON_PPBIZON, "PP-Bizon",    WeaponIcons::BIZON },
+							{ WEAPON_XM1014,  "XM1014",      WeaponIcons::XM1014 },
+							{ WEAPON_NOVA,    "Nova",        WeaponIcons::NOVA },
+							{ WEAPON_MAG7,    "MAG-7",       WeaponIcons::MAG7 },
+							{ WEAPON_SAWEDOFF,"Sawed-Off",    WeaponIcons::SAWEDOFF },
+							{ WEAPON_NEGEV,   "Negev",       WeaponIcons::NEGEV },
+							{ WEAPON_M249,    "M249",        WeaponIcons::M249 },
+							{ WEAPON_DEAGLE,  "Desert Eagle", WeaponIcons::DEAGLE },
+							{ WEAPON_USP,     "USP-S",       WeaponIcons::USP_SILENCER },
+							{ WEAPON_GLOCK,   "Glock-18",    WeaponIcons::GLOCK },
+							{ WEAPON_P250,    "P250",        WeaponIcons::P250 },
+							{ WEAPON_TEC9,    "Tec-9",       WeaponIcons::TEC9 },
+							{ WEAPON_FIVESEVEN,"Five-SeveN",  WeaponIcons::FIVESEVEN },
+							{ WEAPON_ELITE,   "Dual Berettas",WeaponIcons::ELITE },
+							{ WEAPON_CZ75,    "CZ75-Auto",   WeaponIcons::CZ75A },
+							{ WEAPON_REVOLVER,"R8 Revolver",  WeaponIcons::REVOLVER },
+							{ WEAPON_P2000,   "P2000",       WeaponIcons::HKP2000 },
+							{ WEAPON_KNIFE_BAYONET,  "Bayonet",      WeaponIcons::KNIFE_BAYONET },
+							{ WEAPON_KNIFE_FLIP,     "Flip Knife",   WeaponIcons::KNIFE_FLIP },
+							{ WEAPON_KNIFE_GUT,      "Gut Knife",    WeaponIcons::KNIFE_GUT },
+							{ WEAPON_KNIFE_KARAMBIT, "Karambit",     WeaponIcons::KNIFE_KARAMBIT },
+							{ WEAPON_KNIFE_M9,       "M9 Bayonet",   WeaponIcons::KNIFE_M9_BAYONET },
+							{ WEAPON_KNIFE_BUTTERFLY,"Butterfly",    WeaponIcons::KNIFE_BUTTERFLY },
+							{ WEAPON_KNIFE_SKELETON, "Skeleton",     WeaponIcons::KNIFE_SKELETON },
+							{ WEAPON_KNIFE_KUKRI,    "Kukri",        WeaponIcons::KNIFE_KUKRI },
+						};
 
-					// Active skins list
-					const auto& active = SkinChanger::GetAll();
-					if (!active.empty()) {
-						ImGui::Spacing();
-						ImGui::Text("Active Skins");
-						ImGui::Separator();
-						for (const auto& [id, skin] : active) {
-							const auto& wname = SkinDB::Weapons().count(id)
-								? SkinDB::Weapons().at(id).display_name : "Unknown";
-							ImGui::Text("%s: kit %d, wear %.2f", wname, skin.paint_kit, skin.wear);
+						// Category filter: 0=All, 1=Rifles, 2=SMGs, 3=Shotguns, 4=Snipers, 5=Pistols, 6=Knives
+						auto fits = [&](int id) -> bool {
+							if (skin_category == 0) return true;
+							if (skin_category == 6) return id >= 500;
+							if (skin_category == 1) {
+								return id==WEAPON_AK47||id==WEAPON_M4A4||id==WEAPON_M4A1S||
+									id==WEAPON_AUG||id==WEAPON_SG553||id==WEAPON_FAMAS||
+									id==WEAPON_GALIL;
+							}
+							if (skin_category == 2) {
+								return id==WEAPON_MAC10||id==WEAPON_UMP45||id==WEAPON_MP7||
+									id==WEAPON_MP9||id==WEAPON_P90||id==WEAPON_MP5SD||
+									id==WEAPON_PPBIZON;
+							}
+							if (skin_category == 3) {
+								return id==WEAPON_XM1014||id==WEAPON_NOVA||id==WEAPON_MAG7||
+									id==WEAPON_SAWEDOFF||id==WEAPON_NEGEV||id==WEAPON_M249;
+							}
+							if (skin_category == 4) {
+								return id==WEAPON_AWP||id==WEAPON_SSG08||id==WEAPON_G3SG1||
+									id==WEAPON_SCAR20;
+							}
+							if (skin_category == 5) {
+								return id==WEAPON_DEAGLE||id==WEAPON_USP||id==WEAPON_GLOCK||
+									id==WEAPON_P250||id==WEAPON_TEC9||id==WEAPON_FIVESEVEN||
+									id==WEAPON_ELITE||id==WEAPON_CZ75||id==WEAPON_REVOLVER||
+									id==WEAPON_P2000;
+							}
+							return true;
+						};
+
+						// Render weapon grid
+						const float card_w = 100.0f;
+						const float card_h = 52.0f;
+						const float spacing = 6.0f;
+						const int cols = std::max(1, static_cast<int>((grid_w + spacing) / (card_w + spacing)));
+						int col = 0;
+
+						for (const auto& w : all_weapons) {
+							if (!fits(w.id)) continue;
+
+							if (col > 0) ImGui::SameLine(0, spacing);
+
+							// Check if this weapon has an active skin
+							const auto& all_skins = SkinDB::SkinsByWeapon();
+							auto skin_it = SkinChanger::GetAll().find(w.id);
+							bool has_skin = (skin_it != SkinChanger::GetAll().end() && skin_it->second.paint_kit > 0);
+
+							bool is_sel = (selected_weapon == w.id);
+							ImVec4 bg = is_sel
+								? ImVec4(0.12f, 0.28f, 0.46f, 0.90f)
+								: has_skin
+									? ImVec4(0.08f, 0.20f, 0.12f, 0.85f)
+									: ImVec4(0.09f, 0.11f, 0.16f, 0.85f);
+							ImVec4 border = is_sel
+								? ImVec4(0.26f, 0.56f, 0.92f, 0.80f)
+								: has_skin
+									? ImVec4(0.20f, 0.50f, 0.30f, 0.60f)
+									: ImVec4(0.14f, 0.22f, 0.34f, 0.30f);
+
+							ImGui::PushStyleColor(ImGuiCol_Button, bg);
+							ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(bg.x + 0.04f, bg.y + 0.04f, bg.z + 0.06f, bg.w));
+							ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+
+							// Card button: icon on left, name on right
+							if (ImGui::Button(w.name, ImVec2(card_w, card_h))) {
+								selected_weapon = w.id;
+								selected_skin = 0;
+							}
+
+							ImGui::PopStyleVar();
+							ImGui::PopStyleColor(2);
+
+							// Draw icon overlay
+							if (ImGui::IsItemHovered())
+								ImGui::SetTooltip("%s%s", w.name, has_skin ? " (active)" : "");
+
+							col = (col + 1) % cols;
 						}
 					}
+					ImGui::EndChild();
+
+					ImGui::SameLine(0, 8);
+
+					// ── Skin config panel (right side) ─────────────────────────────
+					ImGui::BeginChild("##skin_config", ImVec2(config_w, 0), ImGuiChildFlags_Borders);
+					{
+						const auto& winfo = SkinDB::Weapons().count(selected_weapon)
+							? SkinDB::Weapons().at(selected_weapon)
+							: SkinDB::WeaponInfo{ "Unknown", 0 };
+						ImGui::Text("%s", winfo.display_name);
+						ImGui::Separator();
+						ImGui::Spacing();
+
+						// Skin selector — per-weapon
+						const auto& all_skins = SkinDB::SkinsByWeapon();
+						const auto weapon_it = all_skins.find(selected_weapon);
+						const auto& skins = (weapon_it != all_skins.end())
+							? weapon_it->second
+							: SkinDB::PopularSkins();
+						if (selected_skin >= static_cast<int>(skins.size()))
+							selected_skin = 0;
+
+						if (ImGui::BeginCombo("Skin", skins[selected_skin].name)) {
+							for (int i = 0; i < static_cast<int>(skins.size()); ++i) {
+								bool is_sel = (selected_skin == i);
+								if (ImGui::Selectable(skins[i].name, is_sel))
+									selected_skin = i;
+								if (is_sel) ImGui::SetItemDefaultFocus();
+							}
+							ImGui::EndCombo();
+						}
+
+						ImGui::Spacing();
+
+						// Wear
+						ImGui::Text("Wear");
+						ImGui::SliderFloat("##wear", &selected_wear, 0.0f, 1.0f, "%.3f");
+						ImGui::SameLine();
+						ImGui::TextColored(ImVec4(0.7f, 0.8f, 0.9f, 1.0f), "%s", SkinDB::WearName(selected_wear));
+
+						// Seed
+						ImGui::Text("Seed");
+						ImGui::SliderInt("##seed", &selected_seed, 0, 1000);
+
+						// StatTrak
+						ImGui::Checkbox("StatTrak", &stattrak_on);
+						if (stattrak_on) {
+							if (selected_stattrak < 0) selected_stattrak = 0;
+							ImGui::SliderInt("Kills", &selected_stattrak, 0, 999999);
+						} else {
+							selected_stattrak = -1;
+						}
+
+						ImGui::Spacing();
+						ImGui::Separator();
+						ImGui::Spacing();
+
+						// Apply button
+						ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.28f, 0.46f, 0.90f));
+						ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.16f, 0.34f, 0.54f, 0.95f));
+						if (ImGui::Button("Apply Skin", ImVec2(-1, 32))) {
+							auto& skin = SkinChanger::Get(selected_weapon);
+							skin.paint_kit = skins[selected_skin].paint_kit;
+							skin.wear = selected_wear;
+							skin.seed = selected_seed;
+							skin.stattrak = selected_stattrak;
+							SkinChanger::ForceUpdate();
+						}
+						ImGui::PopStyleColor(2);
+
+						// Reset button
+						if (ImGui::Button("Reset to Default", ImVec2(-1, 26))) {
+							SkinChanger::Get(selected_weapon) = SkinOverride{};
+						}
+
+						ImGui::Spacing();
+
+						// Active skins summary
+						const auto& active = SkinChanger::GetAll();
+						if (!active.empty()) {
+							ImGui::Text("Active (%d)", (int)active.size());
+							ImGui::Separator();
+							ImGui::BeginChild("##active_skins", ImVec2(0, 80));
+							for (const auto& [id, skin] : active) {
+								const auto& wn = SkinDB::Weapons().count(id)
+									? SkinDB::Weapons().at(id).display_name : "?";
+								ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.5f, 1.0f), "%s", wn);
+								ImGui::SameLine();
+								ImGui::TextDisabled("kit %d  wear %.2f", skin.paint_kit, skin.wear);
+							}
+							ImGui::EndChild();
+						}
+					}
+					ImGui::EndChild();
 				}
 				else if (active_tab == Tab::MACRO)
 				{
