@@ -10,11 +10,11 @@ bool Weapon::Update() {
 	if (!p)
 		return false;
 
-    if (!entity_list)
+    if (!pawn_entity_list)
         return false;
 
-    // Similar to Player::GetPawn(); buckets sit at +0x0 in current builds (was +0x10).
-    uintptr_t bucket_ptr = p->read<uintptr_t>(entity_list + 0x0 + 0x8 * ((slot_index & 0x7FFF) >> 9));
+    // Weapon entities are in the pawn entity list (C_BasePlayerWeapon)
+    uintptr_t bucket_ptr = p->read<uintptr_t>(pawn_entity_list + 0x0 + 0x8 * ((slot_index & 0x7FFF) >> 9));
     if (!bucket_ptr)
         return false;
 

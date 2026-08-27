@@ -53,8 +53,8 @@ bool Player::GetPawn() {
 
 	this->pawn_controller_addr = entity_pawn_address;
 
-	// Entity bucket access: entity_list + 0x0 + stride * (handle>>9)
-	auto entity_pawn_list_entry = p->read<uintptr_t>(this->entity_list + 0x0 + 0x8 * ((entity_pawn_address & 0x7FFF) >> 9));
+	// Entity bucket access: pawn_entity_list + 0x0 + stride * (handle>>9)
+	auto entity_pawn_list_entry = p->read<uintptr_t>(this->pawn_entity_list + 0x0 + 0x8 * ((entity_pawn_address & 0x7FFF) >> 9));
 
 	if (!entity_pawn_list_entry)
 		return false;
@@ -192,7 +192,7 @@ bool Player::UpdateWeapon() {
 	if (!active_weapon_index)
 		return false;
 
-	auto weapon = Weapon(this->entity_list, active_weapon_index);
+	auto weapon = Weapon(this->entity_list, this->pawn_entity_list, active_weapon_index);
 
 	if (!weapon.Update())
 		return false;

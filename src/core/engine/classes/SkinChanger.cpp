@@ -138,8 +138,9 @@ void SkinChanger::Run() {
     }
 
     // ── Get local pawn via the controller's m_hPawn ──
+    auto client = Engine::GetClient();
     const auto controller = p->read<uintptr_t>(
-        cache.game.entity_list + offsets::localPlayerController * 8);
+        client.base + offsets::localPlayerController);
 
     if (!controller)
         return;
@@ -148,7 +149,7 @@ void SkinChanger::Run() {
     if (!pawn_handle || pawn_handle == 0xFFFFFFFF)
         return;
 
-    const uintptr_t local_pawn = ResolveHandle(cache.game.entity_list, pawn_handle);
+    const uintptr_t local_pawn = ResolveHandle(cache.game.pawn_entity_list, pawn_handle);
     if (!local_pawn)
         return;
 
@@ -170,7 +171,7 @@ void SkinChanger::Run() {
             continue;
 
         const uintptr_t weapon_entity = ResolveHandle(
-            cache.game.entity_list, weapon_handle);
+            cache.game.pawn_entity_list, weapon_handle);
 
         if (!weapon_entity)
             continue;

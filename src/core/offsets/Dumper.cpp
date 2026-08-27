@@ -42,6 +42,14 @@ bool Dumper::InitImpl() {
     offsets::entityList = temp - client.base;
     LOGF(VERBOSE, "Found 'entityList' offset at 0x{:X}", offsets::entityList);
 
+    // Pawn Entity List (for C_CSPlayerPawn entities)
+    if (!(temp = Scan(offsets::signatures::pawnEntityList, client))) {
+        LOGF(WARNING, "Could not find offset for 'pawnEntityList', pawn resolution may fail");
+    } else {
+        offsets::pawnEntityList = temp - client.base;
+        LOGF(VERBOSE, "Found 'pawnEntityList' offset at 0x{:X}", offsets::pawnEntityList);
+    }
+
     // Local Player Controller
     if (!(temp = Scan(offsets::signatures::localPlayerController, client))) {
         LOGF(FATAL, "Could not find offset for 'localPlayerController'");

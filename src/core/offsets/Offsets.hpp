@@ -2,6 +2,7 @@ namespace offsets
 {
 	// libclient.so
 	inline DWORD entityList;
+	inline DWORD pawnEntityList;  // Separate entity list for pawns (C_CSPlayerPawn)
 	inline DWORD viewMatrix;
 	inline DWORD localPlayerController;
 	inline DWORD globalVars;
@@ -99,6 +100,7 @@ namespace offsets
 		inline const Signature viewMatrix = { "C6 83 ?? ?? 00 00 01 4C 8D 05", 10, 14 };
 		inline const Signature globalVars = { "48 8D 05 ?? ?? ?? ?? 48 8B 00 8B 40 44 F3", 3, 7 };
 		inline const Signature entityList = { "48 8B 3D ?? ?? ?? ?? 48 85 FF 0F 94 C0 83 FE FE", 3, 7 };
+		inline const Signature pawnEntityList = { "48 8B 0D ?? ?? ?? ?? 48 85 C9 74 ?? 48 8B 01 FF 50", 3, 7 };
 		inline const Signature localPlayerController = { "48 83 3D ?? ?? ?? ?? 00 0F 95 C0 C3", 3, 8 };
 		inline const Signature plantedC4 = { "48 8D 35 ?? ?? ?? ?? 66 0F EF C0 C6 05 ?? ?? ?? ?? 01 48 8D 3D", 3, 14 };
 
