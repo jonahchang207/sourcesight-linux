@@ -7,13 +7,18 @@
 #define Window X11Window
 #include <GLFW/glfw3native.h>
 #include <X11/Xlib.h>
+#include <X11/Xatom.h>
 #include <X11/keysym.h>
 #include <X11/extensions/shape.h>
 #undef Window
 #include <GL/gl.h>
 #include <imgui/backends/imgui_impl_glfw.h>
 #include <imgui/backends/imgui_impl_opengl3.h>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <string>
+#include <unistd.h>
 
 namespace {
 
@@ -61,6 +66,8 @@ void ScrollCallbackRedirect(GLFWwindow* window, double xoffset, double yoffset) 
 }
 
 void PollGlobalKeyboard() {
+    if (glfwGetPlatform() != GLFW_PLATFORM_X11)
+        return;
     Display* display = glfwGetX11Display();
     if (!display)
         return;
@@ -95,6 +102,8 @@ void PollGlobalKeyboard() {
 }
 
 void PollGlobalPointer() {
+    if (glfwGetPlatform() != GLFW_PLATFORM_X11)
+        return;
     Display* display = glfwGetX11Display();
     if (!display || !Window::hwnd)
         return;
@@ -155,28 +164,129 @@ void PollGlobalPointer() {
 // region, so Hyprland routes pointer events to the windows below. Re-applied
 // every frame so nothing can override it.
 //
-// When the menu is open, the input region covers the whole screen: every click
-// goes to the overlay and ImGui routes it to the menu, its popups, and the
-// draggable overlay panels (radar, spectator list). Nothing falls through to
-// the game while configuring. When the menu is closed the region is empty, so
-// the game receives every click again.
+// While the menu is open only the menu panel itself is interactive: its
+// rectangle becomes the input region and everything else stays click-through,
+// so the game keeps receiving the mouse. (ImGui popups that open outside the
+// panel lose clicks as a trade-off; previously the whole screen was captured,
+// which made the overlay swallow every click.) When the menu is closed the
+// region is empty, so the game receives every click again.
 void ApplyClickThrough() {
+    // The X11 native API is unavailable when GLFW selected Wayland.
+    if (glfwGetPlatform() != GLFW_PLATFORM_X11 || !Window::hwnd)
+        return;
     Display* display = glfwGetX11Display();
-    if (!display || !Window::hwnd)
+    if (!display)
         return;
 
     X11Window xwin = glfwGetX11Window(Window::hwnd);
 
     if (Window::capture_menu) {
+        // menu_rect is in window (== ImGui display) coordinates; the overlay is
+        // positioned exactly over the game window, so they line up directly.
+        const float fx = Window::menu_rect[0], fy = Window::menu_rect[1];
+        const float fw = Window::menu_rect[2], fh = Window::menu_rect[3];
+        if (fw > 0.f && fh > 0.f) {
+            XRectangle rect = {
+                static_cast<short>(fx), static_cast<short>(fy),
+                static_cast<unsigned short>(fw), static_cast<unsigned short>(fh)
+            };
+            XShapeCombineRectangles(display, xwin, ShapeInput, 0, 0, &rect, 1, ShapeSet, Unsorted);
+            return;
+        }
+        // No menu geometry yet: fall back to capturing the whole window.
         int width = 0, height = 0;
         glfwGetFramebufferSize(Window::hwnd, &width, &height);
-        if (width <= 0 || height <= 0)
-            return;
-        XRectangle rect = { 0, 0, static_cast<unsigned short>(width), static_cast<unsigned short>(height) };
-        XShapeCombineRectangles(display, xwin, ShapeInput, 0, 0, &rect, 1, ShapeSet, Unsorted);
-    } else {
-        XShapeCombineRectangles(display, xwin, ShapeInput, 0, 0, NULL, 0, ShapeSet, Unsorted);
+        if (width > 0 && height > 0) {
+            XRectangle rect = { 0, 0, static_cast<unsigned short>(width), static_cast<unsigned short>(height) };
+            XShapeCombineRectangles(display, xwin, ShapeInput, 0, 0, &rect, 1, ShapeSet, Unsorted);
+        }
+        return;
     }
+
+    XShapeCombineRectangles(display, xwin, ShapeInput, 0, 0, NULL, 0, ShapeSet, Unsorted);
+}
+
+// Request the window manager keep the overlay above every other window by
+// setting the standard _NET_WM_STATE_ABOVE hint. GLFW's FLOATING flag maps to
+// the same concept but is unreliable under XWayland/Hyprland, so set it
+// explicitly. X11-only (Wayland has no notion of this from the client).
+void SetX11AlwaysOnTop() {
+    if (glfwGetPlatform() != GLFW_PLATFORM_X11 || !Window::hwnd)
+        return;
+    Display* display = glfwGetX11Display();
+    if (!display)
+        return;
+    const X11Window xwin = glfwGetX11Window(Window::hwnd);
+    const Atom wm_state = XInternAtom(display, "_NET_WM_STATE", False);
+    const Atom above = XInternAtom(display, "_NET_WM_STATE_ABOVE", False);
+    if (wm_state == None || above == None)
+        return;
+    Atom above_copy = above; // XChangeProperty may write to the source buffer
+    XChangeProperty(display, xwin, wm_state, XA_ATOM, 32, PropModeReplace,
+                    reinterpret_cast<unsigned char*>(&above_copy), 1);
+    XFlush(display);
+}
+
+// Wayland clients cannot set their own position; the compositor is the only
+// authority. Find our own Hyprland window address (via `hyprctl clients`) and
+// ask Hyprland to move us with `movewindowpixel`. The address is stable for
+// the lifetime of the window, so it is cached after the first lookup.
+bool GetOwnHyprlandAddress(std::string& out) {
+    static std::string cached;
+    if (!cached.empty()) {
+        out = cached;
+        return true;
+    }
+
+    FILE* pipe = ::popen("hyprctl clients -j", "r");
+    if (!pipe)
+        return false;
+    std::string json;
+    char buf[4096];
+    size_t n;
+    while ((n = ::fread(buf, 1, sizeof(buf), pipe)) > 0)
+        json.append(buf, n);
+    ::pclose(pipe);
+
+    // Each client object lists "address" before "pid", so locate our pid and
+    // scan backwards for the nearest "address": "0x..." belonging to it.
+    const std::string marker = "\"pid\": " + std::to_string(::getpid());
+    const size_t p = json.find(marker);
+    if (p == std::string::npos)
+        return false;
+    const std::string addr_key = "\"address\": \"";
+    const size_t a = json.rfind(addr_key, p);
+    if (a == std::string::npos)
+        return false;
+    const size_t start = a + addr_key.size();
+    const size_t end = json.find('"', start);
+    if (end == std::string::npos || end == start)
+        return false;
+    cached = json.substr(start, end - start);
+    out = cached;
+    return true;
+}
+
+// Since Hyprland 0.55 (the Lua config era) window rules are defined declaratively
+// in the config via `hl.window_rule`, and the legacy `hyprctl keyword windowrulev2`
+// hyprlang path no longer applies effect rules (like blur) reliably. So the
+// authoritative fix for the frosted overlay is a rule in the user's Hyprland
+// config (see the `sourcesight` rule we add to rules.lua): it marks the overlay
+// `opaque` and `no_blur`, which stops Hyprland from blurring the game behind the
+// transparent framebuffer.
+//
+// The dispatch below is only a best-effort, harmless fallback for older Hyprland
+// (< 0.55) that still supports runtime `windowrulev2`. It uses the correct
+// `no_blur` property name.
+void ApplyHyprlandNoBlurRule() {
+    if (glfwGetPlatform() != GLFW_PLATFORM_WAYLAND)
+        return; // XWayland blur is handled in the X11 branch of SpawnWindow.
+    std::string addr;
+    if (!GetOwnHyprlandAddress(addr))
+        return;
+    const std::string cmd = "hyprctl keyword windowrulev2 no_blur, address:" + addr + " >/dev/null 2>&1";
+    if (::system(cmd.c_str()) != 0)
+        LOGF(WARNING, "[window] runtime no_blur rule not applied (modern Hyprland uses config rules)");
 }
 
 } // namespace
@@ -185,10 +295,26 @@ bool Window::vsync = false;
 NativeWindow Window::hwnd = nullptr;
 
 bool Window::SpawnWindow() {
-    // Omarchy uses Hyprland. GLFW's X11 backend gives us reliable transparent
-    // and mouse-passthrough window controls under XWayland.
-    glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
-    if (!glfwInit()) return false;
+    // The X11 (XWayland) backend is the fully-supported path: transparent
+    // framebuffers, mouse passthrough, window positioning, and the global
+    // keyboard/pointer polling that drives the menu all work there. Native
+    // Wayland has none of that for an overlay window, so prefer X11
+    // automatically and only fall back to Wayland when X11 is unavailable.
+    // SOURCESIGHT_GLFW_PLATFORM=x11|wayland overrides the default.
+    const char* forced_platform = std::getenv("SOURCESIGHT_GLFW_PLATFORM");
+    const bool force_wayland = forced_platform && std::strcmp(forced_platform, "wayland") == 0;
+    glfwInitHint(GLFW_PLATFORM, force_wayland ? GLFW_PLATFORM_WAYLAND : GLFW_PLATFORM_X11);
+
+    if (!glfwInit()) {
+        // Retry with the other backend before giving up (e.g. no XWayland
+        // available, or Wayland chosen but the compositor refused us).
+        glfwInitHint(GLFW_PLATFORM, force_wayland ? GLFW_PLATFORM_X11 : GLFW_PLATFORM_WAYLAND);
+        if (!glfwInit()) {
+            LOGF(WARNING, "GLFW initialization failed; display session is unavailable");
+            return false;
+        }
+        LOGF(WARNING, "[window] preferred backend unavailable; fell back to the other one");
+    }
     glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
     glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
     glfwWindowHint(GLFW_FLOATING, GLFW_TRUE);
@@ -201,22 +327,55 @@ bool Window::SpawnWindow() {
         glfwTerminate();
         return false;
     }
-    hwnd = glfwCreateWindow(mode->width, mode->height, "SourceSight Linux", nullptr, nullptr);
+    hwnd = glfwCreateWindow(mode->width, mode->height, "SourceSight", nullptr, nullptr);
     if (!hwnd) {
         glfwTerminate();
         return false;
     }
     glfwSetWindowPos(hwnd, 0, 0);
     glfwSetWindowAttrib(hwnd, GLFW_MOUSE_PASSTHROUGH, GLFW_TRUE);
+    // XShape is only available through the X11 native handle. On Wayland,
+    // GLFW's native mouse-passthrough attribute is the supported mechanism.
     ApplyClickThrough();
     glfwMakeContextCurrent(hwnd);
     glfwSwapInterval(0);
+
+    SetX11AlwaysOnTop();
+
+    // Hyprland may tile a new window; an overlay must float above the game.
+    // One-shot IPC: once our address is known, ask the compositor to float it.
+    // (X11 windows honor the GLFW_FLOATING hint above instead.)
+    if (glfwGetPlatform() == GLFW_PLATFORM_WAYLAND) {
+        std::string addr;
+        if (GetOwnHyprlandAddress(addr)) {
+            const std::string cmd = "hyprctl dispatch setfloating address:" + addr + " >/dev/null 2>&1";
+            ::system(cmd.c_str());
+        }
+        ApplyHyprlandNoBlurRule();
+    } else {
+        // XWayland overlay: Hyprland still blurs behind it. Ask for the same
+        // exemption using the X11 window id (visible in `hyprctl clients`).
+        Display* display = glfwGetX11Display();
+        if (display && hwnd) {
+            const X11Window xwin = glfwGetX11Window(hwnd);
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "0x%lx", static_cast<unsigned long>(xwin));
+            const std::string cmd = std::string("hyprctl keyword windowrulev2 no_blur, address:") + buf + " >/dev/null 2>&1";
+            ::system(cmd.c_str());
+        }
+    }
+
+    LOGF(INFO, "[window] overlay backend={} initial size={}x{}",
+        glfwGetPlatform() == GLFW_PLATFORM_WAYLAND ? "wayland" : "x11",
+        mode->width, mode->height);
     return true;
 }
 
 void Window::DespawnWindow() {
-    if (hwnd) glfwDestroyWindow(hwnd);
-    hwnd = nullptr;
+    if (hwnd) {
+        glfwDestroyWindow(hwnd);
+        hwnd = nullptr;
+    }
     glfwTerminate();
 }
 
@@ -224,6 +383,8 @@ bool Window::CreateDevice() { return hwnd != nullptr; }
 void Window::DestroyDevice() {}
 
 bool Window::CreateImGui() {
+    if (!hwnd)
+        return false;
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
@@ -257,6 +418,9 @@ void Window::StartRender() {
     // Keep the overlay click-through: re-apply the empty input region every
     // frame so map/resize/compositor events can never restore a full one.
     ApplyClickThrough();
+    // Re-assert the always-on-top hint: the WM/compositor can drop it when a
+    // new window is focused or a fullscreen game appears.
+    SetX11AlwaysOnTop();
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     // The overlay never has OS focus, so the GLFW backend delivers no input.
@@ -278,7 +442,12 @@ void Window::EndRender() {
     glfwSwapBuffers(hwnd);
 }
 
-void Window::SetTopMost(NativeWindow, bool) {}
+void Window::SetTopMost(NativeWindow, bool) {
+    // The window is created with GLFW_FLOATING; also set the X11
+    // _NET_WM_STATE_ABOVE hint so the WM keeps it above every window.
+    // Wayland has no client-side way to express this.
+    SetX11AlwaysOnTop();
+}
 void Window::SetClickthrough(NativeWindow window, bool) {
     // The overlay is ALWAYS mouse-passthrough on Linux: even while the menu is
     // open, clicks outside the menu must reach CS2. Ignore the toggle argument
@@ -305,7 +474,56 @@ void Window::SetVSync(bool enable) {
     vsync = enable;
     glfwSwapInterval(enable ? 1 : 0);
 }
+bool Window::TrackGameWindow(int x, int y, int w, int h) {
+    if (!hwnd || w <= 0 || h <= 0)
+        return false;
+
+    // Apply sizes/positions only when they actually change; each call may
+    // otherwise shell out to hyprctl, which is comparatively expensive.
+    static int last_x = 0, last_y = 0, last_w = 0, last_h = 0;
+    const bool size_changed = (w != last_w || h != last_h);
+    const bool pos_changed = (x != last_x || y != last_y);
+
+    static bool logged = false;
+    if (!logged && (size_changed || pos_changed)) {
+        logged = true;
+        LOGF(INFO, "[window] tracking game window: at=({}, {}) size={}x{}", x, y, w, h);
+    }
+
+    if (size_changed) {
+        glfwSetWindowSize(hwnd, w, h);
+        last_w = w;
+        last_h = h;
+    }
+
+    if (glfwGetPlatform() == GLFW_PLATFORM_X11) {
+        if (pos_changed) {
+            glfwSetWindowPos(hwnd, x, y);
+            last_x = x;
+            last_y = y;
+        }
+        return true;
+    }
+
+    // Wayland: ask the compositor to move us to the game window's position.
+    if (pos_changed) {
+        std::string addr;
+        if (GetOwnHyprlandAddress(addr)) {
+            const std::string cmd = "hyprctl dispatch movewindowpixel exact " +
+                std::to_string(x) + " " + std::to_string(y) +
+                ",address:" + addr + " >/dev/null 2>&1";
+            if (::system(cmd.c_str()) == 0) {
+                last_x = x;
+                last_y = y;
+            }
+        }
+    }
+    return true;
+}
+
 bool Window::IsKeyDown(int keysym) {
+    if (glfwGetPlatform() != GLFW_PLATFORM_X11)
+        return false;
     Display* display = glfwGetX11Display();
     if (!display) return false;
     char keys[32]{};

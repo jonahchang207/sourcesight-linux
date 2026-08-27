@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(sourcesight-linux VERSION 0.1.0 LANGUAGES CXX)
+project(sourcesight VERSION 0.1.0 LANGUAGES CXX)
 
 if(NOT UNIX OR APPLE)
     message(FATAL_ERROR "This CMake target is for Linux. Use the Visual Studio solution on Windows.")
@@ -30,6 +30,7 @@ list(APPEND APP_SOURCES
     "src/external/AsyncLogger/src/LogStream.cpp")
 
 add_executable(sourcesight ${APP_SOURCES})
+set_target_properties(sourcesight PROPERTIES OUTPUT_NAME "sourcesight")
 target_compile_definitions(sourcesight PRIVATE _GNU_SOURCE)
 target_compile_options(sourcesight PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(sourcesight PRIVATE src src/external src/external/imgui

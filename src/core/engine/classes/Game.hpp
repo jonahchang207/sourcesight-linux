@@ -11,23 +11,22 @@ public:
     bool UpdateEntityList();
 
     // Resolves a CS2 entity handle (controller, pawn or weapon) to an entity
-    // address through the single global entity list:
+    // address through the single global entity list (Linux layout):
     //
-    //   chunk = entity_list[ (handle >> 9) & 0x3F ]      (array of chunk ptrs)
+    //   chunk = *(entity_list + 8 * ((handle >> 9) & 0x3F))   (bucket ptr array at +0x0)
     //   slot  = chunk + 0x70 * (handle & 0x1FF)
     //   entity = *(void**)slot                           (instance pointer at +0x0)
     //
-    // This mirrors the bucket access CGameEntitySystem::GetBaseEntity()
-    // performs on the installed libclient.so. Handles 0xFFFFFFFF/-2 are
-    // sentinels. No extra handle field is validated inside the slot: the
-    // layout does not store the entity handle at slot +0x10 on this build.
+    // This mirrors the bucket access performed by the Linux build of
+    // CGameEntitySystem::GetBaseEntity(). Handles 0xFFFFFFFF/-2 are
+    // sentinels. (Windows keeps the bucket array at entity_list + 0x10.)
     static uintptr_t ResolveHandle(uintptr_t entity_list, std::uint32_t handle);
 
 public:
     view_matrix_t view_matrix;
 
-    uintptr_t entity_list;        // Global entity list (pointer array of chunks)
-    uintptr_t list_entry;         // First bucket of the controller entity list
+    uintptr_t entity_list;        // Global entity list base (bucket-pointer array on Linux)
+    uintptr_t list_entry;         // Bucket 0 of the global entity list (*(entity_list + 0x0))
 private:
     uintptr_t address;
 };

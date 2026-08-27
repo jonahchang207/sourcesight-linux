@@ -33,7 +33,7 @@ int main()
 
     LogHelper::Init();
 
-    LOGF(INFO, "Compiled {}, Welcome to SourceSight Linux!", __TIMESTAMP__);
+    LOGF(INFO, "Compiled {}, Welcome to SourceSight!", __TIMESTAMP__);
 
 #ifndef _WIN32
     // Print the PID so the process is easy to identify and kill (e.g. kill <pid>).
@@ -76,6 +76,7 @@ int main()
 
 exit:
     LOGF(INFO, "That's it, I'm done. Hope you had a great time!");
+    Renderer::Destroy();
     LogHelper::Destroy();
 #ifdef _WIN32
     std::cin.get();

@@ -7,43 +7,45 @@ GitHub release: https://github.com/jonahchang207/sourcesight-linux/releases/tag/
 
 ---
 
-## CRITICAL: Player ESP Stopped Working (NEW ISSUE — UNRESOLVED)
+## RESOLVED: Player ESP — root cause was Windows member offsets on the Linux build
 
-After the skin changer offset fix commit (5ce84ee), the player ESP stopped rendering players. All diagnostics show `snap=0 alive=0 enemies=0`. This means:
-- The entity list pointer IS resolving (no longer 0x0)
-- But player updates are all failing (0 succeeded, 64 failed)
-- The entity handle resolution with the new +16 offset may be incorrect
+The Aug 26 fix (b703ba2) accidentally replaced the correct **Linux** member offsets
+with **Windows** dump values. The Linux build of CS2 has its own class layout
+(verified: `C_BaseEntity::m_pGameSceneNode` is 0x4A0 on Linux vs 0x330 on
+Windows for the same July build; controller `m_hPawn` 0x83C vs 0x6BC, etc.).
+With the wrong offsets every player read garbage → `0 succeeded, 64 failed`,
+health 0x00C80000, `m_pGameSceneNode`=0, `weapon_services`=0x1.
 
-**Root cause hypothesis:** The +16 offset added to entity bucket access in Player.cpp and SkinChanger.cpp may be wrong for this CS2 build. The old +0x0 offset was working for player resolution but the skin changer offsets were wrong. Now the skin offsets are fixed but the +16 broke player resolution.
+The entity list itself was fine on Linux: the `dwEntityList` global holds the
+bucket-array base, bucket k at `entity_list + 8*k`, 512 slots/bucket at stride
+0x70 with the entity pointer at slot +0x0 (matches the current Linux cheat
+`deadlocked`). The +0x10 bucket offset is the **Windows** layout.
 
-**Key evidence:** Before the +16 change, ESP worked (players rendered). After +16, ESP broke. The skin changer offsets are from a Windows-based UC thread — the Linux entity list structure may differ.
-
-**What to try:**
-1. Revert entity resolution to +0x0 (remove the +16) — this was working for ESP
-2. The skin changer should still work with +0x0 if the entity list pointer from our pattern scan already accounts for the +16 offset
-3. If skins still don't work with +0x0, the issue is the skin offsets themselves, not entity resolution
+**Fix applied (Aug 27):** restored Linux member offsets from the a2x linux
+schema dump and reverted the bucket base to `entity_list + 0x0`.
 
 ---
 
-## Skin Changer — Offsets Fixed But Skins Not Visually Appearing
+## Skin Changer — offsets are Linux values now
 
-The offsets were corrected from a verified UC working external skin changer:
+The earlier "corrected" skin offsets were taken from a Windows UC thread and are
+wrong on Linux. The Linux values (a2x linux libclient.so.hpp) are:
 
-| Offset | Old (wrong) | New (correct) |
-|--------|-------------|---------------|
-| `m_pWeaponServices` | 0x1190 | 0x11A8 |
-| `m_AttributeManager` | 0x1130 | 0x1148 |
-| `m_iItemDefinitionIndex` | 0x10C2 | 0x1BA |
-| `m_nFallbackPaintKit` | 0x31D8 | 0x15F8 |
-| `m_flFallbackWear` | 0x31DC | 0x1600 |
-| `m_nFallbackSeed` | 0x31E0 | 0x15FC |
-| `m_nFallbackStatTrak` | 0x31E4 | 0x1604 |
-| `m_iItemIDHigh` | 0x2FC0 | 0x1D0 |
-| `m_OriginalOwnerXuidLow` | 0x31F4 | 0x15F0 |
+| Offset | Linux (current) |
+|--------|-----------------|
+| `m_pWeaponServices` | 0x1190 (C_BasePlayerPawn) |
+| `m_AttributeManager` | 0x1130 (C_EconEntity) |
+| `m_iItemDefinitionIndex` | 0x10C2 (C_EconItemView) |
+| `m_nFallbackPaintKit` | 0x2510 |
+| `m_flFallbackWear` | 0x2518 |
+| `m_nFallbackSeed` | 0x2514 |
+| `m_nFallbackStatTrak` | 0x251C |
+| `m_iItemIDHigh` | 0x10D8 (C_EconItemView) |
+| `m_iAccountID` | 0x10E0 (C_EconItemView) |
+| `m_OriginalOwnerXuidLow` | 0x2508 (C_EconEntity) |
 
-**What's needed:** The SkinDatabase.hpp has hardcoded paint kit IDs that may be wrong. Need to verify the actual paint kit IDs for each weapon from CS2's item schema. The skin changer writes paint kit IDs but if they're wrong, the game shows default skins or no skin.
-
-**Paint kit ID source:** CS2 stores these in `items_game.txt` (inside `pak01_dir.vpk`). The paint kit IDs are the `id` fields in the `paint_kits` section. Need to extract and map them.
+**Remaining:** verify paint kit IDs in SkinDatabase.hpp against `items_game.txt`,
+and implement the delta-tick force-update for reliable skin application.
 
 ---
 
@@ -93,9 +95,6 @@ The offsets were corrected from a verified UC working external skin changer:
 
 ## What Still Needs Fixing
 
-### CRITICAL: ESP Broken by +16 Entity Resolution Change
-Revert `Player.cpp` and `SkinChanger.cpp` entity resolution back to `+0x0` offset. The ESP was working before this change. The skin changer offsets are the real fix, not the entity resolution change.
-
 ### Skin Paint Kit IDs Need Verification
 The `SkinDatabase.hpp` has hardcoded paint kit IDs. These need to be verified against CS2's actual `items_game.txt`. Wrong IDs = default skins showing.
 
@@ -118,48 +117,40 @@ entityList signature: "48 8B 3D ?? ?? ?? ?? 48 85 FF 0F 94 C0 83 FE FE"
 viewMatrix signature: "C6 83 ?? ?? 00 00 01 4C 8D 05"
 ```
 
-### Controller
+### Controller (Linux)
 ```
-m_hPawn = 0x83C
-m_steamID = 0x900
-m_iszPlayerName = 0x874
+m_hPawn = 0x83C            m_iPing = 0x9B0
+m_steamID = 0x900          m_iszPlayerName = 0x874
 m_bIsLocalPlayerController = 0x908
 m_pInGameMoneyServices = 0x990
 m_iAccount = 0x40
 ```
 
-### Pawn
+### Pawn (Linux)
 ```
-m_vOldOrigin = 0x1340
-m_iHealth = 0x4BC
-m_iTeamNum = 0x557
-m_pGameSceneNode = 0x4A0
-m_angEyeAngles = 0x41E0
-m_pWeaponServices = 0x11A8
-m_hActiveWeapon = 0x60
-m_WeaponCount = 0x50
-m_hMyWeapons = 0x58
-m_AttributeManager = 0x1148
-m_Item = 0x50
-m_iItemDefinitionIndex = 0x1BA
-m_iItemIDHigh = 0x1D0 (on C_EconItemView)
-m_nFallbackPaintKit = 0x15F8
-m_flFallbackWear = 0x1600
-m_nFallbackSeed = 0x15FC
-m_nFallbackStatTrak = 0x1604
-m_OriginalOwnerXuidLow = 0x15F0
-m_iAccountID = 0x1D8
-m_pViewModelServices = 0x1368
-m_hViewModel = 0x40
-m_pGameSceneNode = 0x4A0
+m_vOldOrigin = 0x1340      m_iHealth = 0x4BC
+m_iTeamNum = 0x557         m_vecAbsVelocity = 0x568
+m_pGameSceneNode = 0x4A0   m_angEyeAngles = 0x41E0
+m_entitySpottedState = 0x2AE8  m_bSpottedByMask = 0xC
+m_flFlashOverlayAlpha = 0x13A4
+m_pWeaponServices = 0x1190     m_pObserverServices = 0x11A8
+m_hActiveWeapon = 0x60     m_hMyWeapons = 0x48 (C_NetworkUtlVectorBase)
+m_AttributeManager = 0x1130    m_Item = 0x50
+m_iItemDefinitionIndex = 0x10C2   m_iClip1 = 0x2590
+m_bInReload = 0x26A4       m_bIsScoped = 0x2B00
+m_bIsDefusing = 0x2B02     m_ArmorValue = 0x2B2C
+skin: m_nFallbackPaintKit 0x2510, m_nFallbackSeed 0x2514,
+      m_flFallbackWear 0x2518, m_nFallbackStatTrak 0x251C,
+      m_OriginalOwnerXuidLow 0x2508, m_iItemIDHigh 0x10D8, m_iAccountID 0x10E0
 ```
 
-### Entity Resolution
+### Entity Resolution (Linux)
 ```
-entity_list + 0x10 + 0x8 * ((handle & 0x7FFF) >> 9) = bucket
+entity_list + 0x0 + 0x8 * ((handle & 0x7FFF) >> 9) = bucket ptr   (bucket array at +0x0)
 bucket + 0x70 * (handle & 0x1FF) = entity
 ```
-**NOTE: The +0x10 offset BROKE ESP. Revert to +0x0 if ESP was working before.**
+**NOTE: On the Linux build the bucket-pointer array is at `entity_list + 0x0`.
+The +0x10 base is the Windows layout — it reads NULL on Linux.**
 
 ---
 

@@ -41,6 +41,11 @@ bool Game::UpdateEntityList() {
 
     if (el_ptr != 0) {
         this->entity_list = el_ptr;
+        // On the Linux build the dwEntityList global holds the bucket-array
+        // base: bucket k is a pointer at entity_list + 8*k, and each bucket
+        // holds 512 CEntityIdentity slots (stride 0x70) whose first qword is
+        // the entity pointer. bucket 0 is the first entry (entity_list + 0x0).
+        // (The +0x10 offset is the Windows layout and reads garbage here.)
         this->list_entry = p->read<DWORD64>(this->entity_list + 0x0);
 
         static bool logged = false;
@@ -80,16 +85,13 @@ uintptr_t Game::ResolveHandle(uintptr_t entity_list, std::uint32_t handle)
 
     const std::uint32_t idx = handle & 0x7FFF; // low 15 bits: entity index
 
-    // Pointer array of chunks: entry = ((idx >> 9) & 0x3F)
+    // Bucket-pointer array is inline at entity_list + 0x0 on the Linux
+    // build (bucket k at +8*k); each bucket holds 512 slots with stride 0x70
+    // and the entity instance pointer sits at the start of its slot (+0x0).
     const uintptr_t chunk = p->read<uintptr_t>(entity_list + 8 * ((idx >> 9) & 0x3F));
     if (!chunk)
         return 0;
 
-    // Each chunk holds 512 slots with stride 0x70; the entity instance
-    // pointer sits at the start of its slot (+0x0). Do NOT validate the
-    // slot's +0x10 field against the handle here: on this build that field
-    // is not the entity handle, so the check rejects every entity. This
-    // validation was the regression that made all player updates fail.
     const uintptr_t slot = chunk + 0x70 * (idx & 0x1FF);
 
     return p->read<uintptr_t>(slot);

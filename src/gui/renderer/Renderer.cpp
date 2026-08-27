@@ -8,6 +8,7 @@
 #ifndef _WIN32
 #include <X11/keysym.h>
 #include <filesystem>
+#include <unistd.h>
 #endif
 
 bool Renderer::Init() {
@@ -32,12 +33,12 @@ bool Renderer::IsFocused() {
 
 bool Renderer::InitImpl() {
     if (!Window::SpawnWindow()) {
-        LOGF(FATAL, "Failed to create window");
+        LOGF(WARNING, "Failed to create window; check DISPLAY/WAYLAND_DISPLAY and session permissions");
         return false;
     }
 
     if (!Window::CreateDevice()) {
-        LOGF(FATAL, "Failed to create device");
+        LOGF(WARNING, "Failed to create device");
         Window::DespawnWindow();
         return false;
     }
@@ -253,28 +254,52 @@ bool Renderer::HandleWindowOrder() {
             ::pclose(pipe);
 
             bool cs2_focused = false;
+            bool have_geo = false;
+            int gx = 0, gy = 0, gw = 0, gh = 0;
             try {
                 auto j = nlohmann::json::parse(json);
-                if (j.contains("pid") && j["pid"].is_number())
-                    cs2_focused = (j["pid"].get<pid_t>() == p->pid_);
+                if (j.contains("pid") && j["pid"].is_number()) {
+                    const pid_t active = j["pid"].get<pid_t>();
+                    // Hyprland defaults to focus-follows-mouse, so hovering the
+                    // overlay (menu open) focuses OUR window, not the game's.
+                    // Treat that as in-game or the overlay hides/refocuses in a
+                    // loop every time the mouse crosses it.
+                    cs2_focused = (active == p->pid_ || active == ::getpid());
+                }
+                // Hyprland reports the focused window's geometry in layout
+                // coordinates; the overlay must match it exactly so the ESP
+                // (projected at the game's render size) lines up.
+                if (j.contains("at") && j["at"].is_array() && j["at"].size() >= 2 &&
+                    j.contains("size") && j["size"].is_array() && j["size"].size() >= 2) {
+                    gx = j["at"][0].get<int>();
+                    gy = j["at"][1].get<int>();
+                    gw = j["size"][0].get<int>();
+                    gh = j["size"][1].get<int>();
+                    have_geo = true;
+                }
             } catch (...) {}
 
             this->isFocused = cs2_focused;
+
+            if (this->isFocused) {
+                if (!overlay_visible) {
+                    Window::SetVisible(true);
+                    overlay_visible = true;
+                }
+                // Keep the overlay glued to the game window while focused.
+                if (have_geo)
+                    Window::TrackGameWindow(gx, gy, gw, gh);
+                return true;
+            }
+
+            if (overlay_visible) {
+                Window::SetVisible(false);
+                overlay_visible = false;
+            }
+            return true;
         } else {
             this->isFocused = true; // fallback: assume focused
         }
-    }
-
-    if (!this->isFocused && overlay_visible) {
-        Window::SetVisible(false);
-        overlay_visible = false;
-        return true;
-    }
-
-    if (!overlay_visible && this->isFocused) {
-        Window::SetVisible(true);
-        overlay_visible = true;
-        return true;
     }
 
     return true;

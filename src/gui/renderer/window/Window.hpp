@@ -66,6 +66,11 @@ public:
 	static bool IsKeyDown(int key);
 	static bool IsFocused();
 
+	// Resize/move the overlay so it exactly covers the game window. On X11
+	// this is client-side; on Wayland the compositor (Hyprland) is asked via
+	// its IPC to move us, since clients cannot position themselves.
+	static bool TrackGameWindow(int x, int y, int w, int h);
+
 	// When the menu is open, keep the overlay click-through everywhere except
 	// the menu rectangle so the menu can be used with the mouse.
 	static void SetMenuCapture(bool enabled, float x, float y, float w, float h);

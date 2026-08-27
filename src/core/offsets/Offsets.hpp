@@ -11,62 +11,64 @@ namespace offsets
 	// libengine2.so
 	inline DWORD buildNumber;
 
-	// Member offsets verified against the installed CS2 Linux build
-	// (Steam buildid 24934554, 2026-08-25) and cross-checked against the
-	// community schema dumps for game builds 14177 and 14178.
+	// Member offsets for the installed CS2 **Linux** build (Steam buildid
+	// 24934554, 2026-08-25) taken from the a2x/cs2-dumper linux branch schema
+	// dump (libclient.so.hpp). NOTE: the Linux build has its own class layout
+	// that differs from Windows (e.g. C_BaseEntity::m_pGameSceneNode is 0x4A0
+	// on Linux vs 0x330 on Windows) — do not mix in Windows dump values.
 	namespace controller {
-		constexpr std::ptrdiff_t m_iPing = 0x830; // uint32
-		constexpr std::ptrdiff_t m_hPawn = 0x6BC; // CHandle<C_BasePlayerPawn>
-		constexpr std::ptrdiff_t m_steamID = 0x780; // uint64
-		constexpr std::ptrdiff_t m_iszPlayerName = 0x6F4; // char[128]
-		constexpr std::ptrdiff_t m_bIsLocalPlayerController = 0x788; // bool
-		constexpr std::ptrdiff_t m_pInGameMoneyServices = 0x810; // CCSPlayerController_InGameMoneyServices*
+		constexpr std::ptrdiff_t m_iPing = 0x9B0; // uint32 - CCSPlayerController
+		constexpr std::ptrdiff_t m_hPawn = 0x83C; // CHandle<C_BasePlayerPawn> - CBasePlayerController
+		constexpr std::ptrdiff_t m_steamID = 0x900; // uint64
+		constexpr std::ptrdiff_t m_iszPlayerName = 0x874; // char[128]
+		constexpr std::ptrdiff_t m_bIsLocalPlayerController = 0x908; // bool
+		constexpr std::ptrdiff_t m_pInGameMoneyServices = 0x990; // CCSPlayerController_InGameMoneyServices*
 		constexpr std::ptrdiff_t m_iAccount = 0x40; // int32 - CCSPlayerController_InGameMoneyServices
 	}
 	namespace pawn {
-		constexpr std::ptrdiff_t m_vOldOrigin = 0x13B8; // Vector
-		constexpr std::ptrdiff_t m_iHealth = 0x34C; // int32
-		constexpr std::ptrdiff_t m_iTeamNum = 0x3E7; // uint8
-		constexpr std::ptrdiff_t m_bIsScoped = 0x1C78; // bool
-		constexpr std::ptrdiff_t m_ArmorValue = 0x1CA4; // int32
-		constexpr std::ptrdiff_t m_bIsDefusing = 0x1C7A; // bool
-		constexpr std::ptrdiff_t m_vecAbsVelocity = 0x3F8; // Vector
+		constexpr std::ptrdiff_t m_vOldOrigin = 0x1340; // Vector - C_BasePlayerPawn
+		constexpr std::ptrdiff_t m_iHealth = 0x4BC; // int32 - C_BaseEntity
+		constexpr std::ptrdiff_t m_iTeamNum = 0x557; // uint8 - C_BaseEntity
+		constexpr std::ptrdiff_t m_bIsScoped = 0x2B00; // bool - C_CSPlayerPawn
+		constexpr std::ptrdiff_t m_ArmorValue = 0x2B2C; // int32 - C_CSPlayerPawn
+		constexpr std::ptrdiff_t m_bIsDefusing = 0x2B02; // bool - C_CSPlayerPawn
+		constexpr std::ptrdiff_t m_vecAbsVelocity = 0x568; // Vector - C_BaseEntity
 
-		constexpr std::ptrdiff_t m_pGameSceneNode = 0x330; // CGameSceneNode*
-		constexpr std::ptrdiff_t m_angEyeAngles = 0x3350; // QAngle (pitch, yaw, roll) - C_CSPlayerPawn
+		constexpr std::ptrdiff_t m_pGameSceneNode = 0x4A0; // CGameSceneNode* - C_BaseEntity
+		constexpr std::ptrdiff_t m_angEyeAngles = 0x41E0; // QAngle - C_CSPlayerPawn (0x41D0 in the Jul dump, +0x10 for build 14177/14178)
 
-		constexpr std::ptrdiff_t m_entitySpottedState = 0x1C60; // EntitySpottedState_t - C_CSPlayerPawn
+		constexpr std::ptrdiff_t m_entitySpottedState = 0x2AE8; // EntitySpottedState_t - C_CSPlayerPawn
 		constexpr std::ptrdiff_t m_bSpottedByMask = 0xC; // uint32[2] - EntitySpottedState_t
 
-		constexpr std::ptrdiff_t m_flFlashOverlayAlpha = 0x141C; // float32 - C_CSPlayerPawnBase
+		constexpr std::ptrdiff_t m_flFlashOverlayAlpha = 0x13A4; // float32 - C_CSPlayerPawnBase
 
-		constexpr std::ptrdiff_t m_pWeaponServices = 0x1208; // CPlayer_WeaponServices*
+		constexpr std::ptrdiff_t m_pWeaponServices = 0x1190; // CPlayer_WeaponServices* - C_BasePlayerPawn
 		constexpr std::ptrdiff_t m_hActiveWeapon = 0x60; // CHandle<C_BasePlayerWeapon> - CPlayer_WeaponServices
 		constexpr std::ptrdiff_t m_WeaponCount = 0x48; // int32 - C_NetworkUtlVectorBase size (m_hMyWeapons + 0x0)
 		constexpr std::ptrdiff_t m_hMyWeapons = 0x48; // C_NetworkUtlVectorBase<CHandle<C_BasePlayerWeapon>>
-		constexpr std::ptrdiff_t m_AttributeManager = 0x11A8; // C_AttributeContainer - C_EconEntity
+		constexpr std::ptrdiff_t m_AttributeManager = 0x1130; // C_AttributeContainer - C_EconEntity
 		constexpr std::ptrdiff_t m_Item = 0x50; // C_EconItemView - C_AttributeContainer
-		constexpr std::ptrdiff_t m_iItemDefinitionIndex = 0x1BA; // uint16 - C_EconItemView
-		constexpr std::ptrdiff_t m_iClip1 = 0x1700; // int32 - C_BasePlayerWeapon
-		constexpr std::ptrdiff_t m_bInReload = 0x1814; // bool - C_CSWeaponBase
-		constexpr std::ptrdiff_t m_pObserverServices = 0x1220; // CPlayer_ObserverServices*
+		constexpr std::ptrdiff_t m_iItemDefinitionIndex = 0x10C2; // uint16 - C_EconItemView
+		constexpr std::ptrdiff_t m_iClip1 = 0x2590; // int32 - C_BasePlayerWeapon
+		constexpr std::ptrdiff_t m_bInReload = 0x26A4; // bool - C_CSWeaponBase
+		constexpr std::ptrdiff_t m_pObserverServices = 0x11A8; // CPlayer_ObserverServices* - C_BasePlayerPawn
 		constexpr std::ptrdiff_t m_pViewModelServices = 0x1368; // CPlayer_ViewModelServices*
 		constexpr std::ptrdiff_t m_hViewModel = 0x40; // CHandle - view model
 
 		// Skin changer netvars (C_EconEntity / C_EconItemView fallback fields)
-		constexpr std::ptrdiff_t m_nFallbackPaintKit = 0x1680; // int32 - paint kit index
-		constexpr std::ptrdiff_t m_flFallbackWear = 0x1688; // float - wear (0=FN, 1=BS)
-		constexpr std::ptrdiff_t m_nFallbackSeed = 0x1684; // int32 - pattern seed
-		constexpr std::ptrdiff_t m_nFallbackStatTrak = 0x168C; // int32 - stattrak kills (-1 = none)
-		constexpr std::ptrdiff_t m_iItemIDHigh = 0x1D0; // int32 - on C_EconItemView sub-object
-		constexpr std::ptrdiff_t m_iAccountID = 0x1D8; // int32 - account ID for ownership
-		constexpr std::ptrdiff_t m_OriginalOwnerXuidLow = 0x1678; // int32 - ownership bypass
+		constexpr std::ptrdiff_t m_nFallbackPaintKit = 0x2510; // int32 - paint kit index
+		constexpr std::ptrdiff_t m_flFallbackWear = 0x2518; // float - wear (0=FN, 1=BS)
+		constexpr std::ptrdiff_t m_nFallbackSeed = 0x2514; // int32 - pattern seed
+		constexpr std::ptrdiff_t m_nFallbackStatTrak = 0x251C; // int32 - stattrak kills (-1 = none)
+		constexpr std::ptrdiff_t m_iItemIDHigh = 0x10D8; // int32 - on C_EconItemView sub-object
+		constexpr std::ptrdiff_t m_iAccountID = 0x10E0; // int32 - account ID for ownership
+		constexpr std::ptrdiff_t m_OriginalOwnerXuidLow = 0x2508; // int32 - ownership bypass
 	}
 
 	namespace bomb {
-		constexpr std::ptrdiff_t m_isPlanted = 0x8; // unk
-		constexpr std::ptrdiff_t m_bC4Activated = 0x11E8; // bool
-		constexpr std::ptrdiff_t m_nBombSite = 0x11A4; // int32
+		constexpr std::ptrdiff_t m_isPlanted = 0x8; // unk (unused; planted C4 check uses the global)
+		constexpr std::ptrdiff_t m_bC4Activated = 0x1170; // bool - C_PlantedC4
+		constexpr std::ptrdiff_t m_nBombSite = 0x112C; // int32 - C_PlantedC4
 
 		constexpr std::ptrdiff_t m_vecAbsOrigin = 0xC8; // VectorWS - CGameSceneNode
 	}
@@ -82,10 +84,10 @@ namespace offsets
 
 	namespace global {
 		constexpr std::ptrdiff_t maxClients = 0x10;
-		// CGlobalVarsBase::currentMapName — pointer to the map name string
-		// (currentMap is the uint64 at 0x180, the name pointer follows at 0x188).
-		constexpr std::ptrdiff_t currentMapName = 0x188;
-		constexpr std::ptrdiff_t currentTime = 0x2C;
+		// CGlobalVarsBase::currentMapName — pointer to the map name string.
+		// 0x198 on the Linux build (Windows uses 0x188).
+		constexpr std::ptrdiff_t currentMapName = 0x198;
+		constexpr std::ptrdiff_t currentTime = 0x30;
 	}
 
 	namespace signatures
@@ -97,13 +99,19 @@ namespace offsets
 			const char* bytes;       // pattern string, '??' are wildcards
 			int8_t disp_offset = 3;  // byte offset of the disp32 from the pattern start
 			int8_t instr_len = 7;    // distance from the pattern start to the next instruction
+			int16_t pre_sub = 0;     // bytes before the pattern to the disp32 instruction (a2x "sub" op)
 		};
 
 		// Linux patterns, taken from the a2x/cs2-dumper linux branch (config.json) and
 		// verified against the installed CS2 Linux build (Steam buildid 24934554, 2026-08-25).
 		inline const Signature viewMatrix = { "C6 83 ?? ?? 00 00 01 4C 8D 05", 10, 14 };
 		inline const Signature globalVars = { "48 8D 05 ?? ?? ?? ?? 48 8B 00 8B 40 44 F3", 3, 7 };
-		inline const Signature entityList = { "48 8B 3D ?? ?? ?? ?? 48 85 FF 0F 94 C0 83 FE FE", 3, 7 };
+		// a2x linux dwEntityList (sub 62 + rip): the `mov rax, [rip+disp]` that
+		// loads the entity list global sits 62 bytes before the matched block.
+		// Fallbacks in Dumper.cpp cover older/newer builds whose code moved.
+		inline const Signature entityList = { "3B 72 10 75 0E 48 83 3A 00 0F 95 C0 C3", 3, 7, 62 };
+		inline const Signature entityListAlt = { "48 8B 3D ?? ?? ?? ?? 48 85 FF 0F 94 C0 83 FE FE", 3, 7 };
+		inline const Signature entityListAlt2 = { "48 89 0D ?? ?? ?? ?? E9 ?? ?? ?? ?? CC", 3, 7 };
 		inline const Signature localPlayerController = { "48 83 3D ?? ?? ?? ?? 00 0F 95 C0 C3", 3, 8 };
 		inline const Signature plantedC4 = { "48 8D 35 ?? ?? ?? ?? 66 0F EF C0 C6 05 ?? ?? ?? ?? 01 48 8D 3D", 3, 14 };
 

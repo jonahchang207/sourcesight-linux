@@ -33,8 +33,22 @@ bool Dumper::InitImpl() {
     offsets::globalVars = temp - client.base;
     LOGF(VERBOSE, "Found 'globalVars' offset at 0x{:X}", offsets::globalVars);
 
-    // Entity List
-    if (!(temp = Scan(offsets::signatures::entityList, client))) {
+    // Entity List: try the current a2x linux pattern first, then fall back
+    // to patterns from previous builds so a changed scan site degrades
+    // gracefully instead of aborting startup.
+    const offsets::signatures::Signature entityListCandidates[] = {
+        offsets::signatures::entityList,
+        offsets::signatures::entityListAlt,
+        offsets::signatures::entityListAlt2,
+    };
+
+    temp = 0;
+    for (const auto& sig : entityListCandidates) {
+        if ((temp = Scan(sig, client)))
+            break;
+    }
+
+    if (!temp) {
         LOGF(FATAL, "Could not find offset for 'entityList'");
         return false;
     }
@@ -114,33 +128,21 @@ bool Dumper::RescanEntityList() {
 
     Dumper& d = GetInstance();
 
-    // Try the original pattern first
-    DWORD64 temp = d.Scan(offsets::signatures::entityList, client);
-    if (temp) {
-        offsets::entityList = temp - client.base;
-        LOGF(INFO, "[dumper] entity list re-scanned: offset=0x{:X}", offsets::entityList);
-        return true;
-    }
-
-    // Fallback: try alternative patterns commonly seen in CS2 builds
-    const offsets::signatures::Signature alt1 = {
-        "48 8B 3D ?? ?? ?? ?? 48 85 FF 74", 3, 7
+    const offsets::signatures::Signature entityListCandidates[] = {
+        offsets::signatures::entityList,
+        offsets::signatures::entityListAlt,
+        offsets::signatures::entityListAlt2,
+        { "48 8B 3D ?? ?? ?? ?? 48 85 FF 74", 3, 7 },
+        { "48 8B 1D ?? ?? ?? ?? 48 85 DB 74", 3, 7 },
     };
-    temp = d.Scan(alt1, client);
-    if (temp) {
-        offsets::entityList = temp - client.base;
-        LOGF(INFO, "[dumper] entity list found with alt pattern: offset=0x{:X}", offsets::entityList);
-        return true;
-    }
 
-    const offsets::signatures::Signature alt2 = {
-        "48 8B 1D ?? ?? ?? ?? 48 85 DB 74", 3, 7
-    };
-    temp = d.Scan(alt2, client);
-    if (temp) {
-        offsets::entityList = temp - client.base;
-        LOGF(INFO, "[dumper] entity list found with alt2 pattern: offset=0x{:X}", offsets::entityList);
-        return true;
+    for (const auto& sig : entityListCandidates) {
+        DWORD64 temp = d.Scan(sig, client);
+        if (temp) {
+            offsets::entityList = temp - client.base;
+            LOGF(INFO, "[dumper] entity list re-scanned: offset=0x{:X}", offsets::entityList);
+            return true;
+        }
     }
 
     LOGF(WARNING, "[dumper] entity list re-scan failed — all patterns exhausted");
@@ -175,10 +177,14 @@ DWORD64 Dumper::Scan(const offsets::signatures::Signature& sig, ProcessModule mo
     if (!list.size())
         return 0;
 
-    if (!process->read_raw(list.at(0) + sig.disp_offset, &offsets, sizeof(DWORD)))
+    // The disp32 may sit `pre_sub` bytes before the matched block (a2x "sub"
+    // operation); the RIP target is then match - pre_sub + disp + instr_len.
+    const DWORD64 base = list.at(0) - sig.pre_sub;
+
+    if (!process->read_raw(base + sig.disp_offset, &offsets, sizeof(DWORD)))
         return 0;
 
-    address = list.at(0) + offsets + sig.instr_len;
+    address = base + offsets + sig.instr_len;
     return address;
 }
 
