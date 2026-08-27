@@ -304,4 +304,12 @@ bool Window::IsKeyDown(int keysym) {
     return code && (keys[code / 8] & (1 << (code % 8)));
 }
 bool Window::IsFocused() { return hwnd && glfwGetWindowAttrib(hwnd, GLFW_FOCUSED); }
+
+void Window::SetVisible(bool visible) {
+    if (!hwnd) return;
+    if (visible)
+        glfwShowWindow(hwnd);
+    else
+        glfwHideWindow(hwnd);
+}
 #endif

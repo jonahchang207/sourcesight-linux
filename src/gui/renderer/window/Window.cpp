@@ -337,6 +337,11 @@ void Window::SetVSync(bool enable) {
 	LOGF(VERBOSE, "VSync is now {}", (enable ? "Enabled" : "Disabled"));
 }
 
+void Window::SetVisible(bool visible) {
+	if (!hwnd) return;
+	ShowWindow(hwnd, visible ? SW_SHOW : SW_HIDE);
+}
+
 
 // declaration of the ImGui_ImplWin32_WndProcHandler function
 // basically integrates ImGui with the Windows message loop so ImGui can process input and events

@@ -239,9 +239,44 @@ bool Renderer::HandleWindowOrder() {
         this->isRunning = false;
         return false;
     }
-    // Hyprland owns stacking and workspace visibility. The supplied rules keep
-    // this fullscreen transparent surface above CS2 without stealing focus.
-    this->isFocused = true;
+
+    // Check if CS2 is the focused window via hyprctl
+    static bool overlay_visible = true;
+    {
+        FILE* pipe = ::popen("hyprctl activewindow -j", "r");
+        if (pipe) {
+            char buf[512];
+            std::string json;
+            size_t n;
+            while ((n = ::fread(buf, 1, sizeof(buf), pipe)) > 0)
+                json.append(buf, n);
+            ::pclose(pipe);
+
+            bool cs2_focused = false;
+            try {
+                auto j = nlohmann::json::parse(json);
+                if (j.contains("pid") && j["pid"].is_number())
+                    cs2_focused = (j["pid"].get<pid_t>() == p->pid_);
+            } catch (...) {}
+
+            this->isFocused = cs2_focused;
+        } else {
+            this->isFocused = true; // fallback: assume focused
+        }
+    }
+
+    if (!this->isFocused && overlay_visible) {
+        Window::SetVisible(false);
+        overlay_visible = false;
+        return true;
+    }
+
+    if (!overlay_visible && this->isFocused) {
+        Window::SetVisible(true);
+        overlay_visible = true;
+        return true;
+    }
+
     return true;
 #endif
 }

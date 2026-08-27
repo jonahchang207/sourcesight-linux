@@ -52,6 +52,7 @@ public:
 #endif
 	static bool SetAffinity(NativeWindow window, WindowAffinity afi);
 	static void SetVSync(bool enable = false);
+	static void SetVisible(bool visible);
 #ifdef _WIN32
 	static void SetParent(HWND window, HWND parent);
 
