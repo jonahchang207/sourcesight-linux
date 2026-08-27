@@ -19,42 +19,46 @@ namespace offsets
 		constexpr std::ptrdiff_t m_bIsLocalPlayerController = 0x908; // bool
 		constexpr std::ptrdiff_t m_pInGameMoneyServices = 0x990; // CCSPlayerController_InGameMoneyServices*
 		constexpr std::ptrdiff_t m_iAccount = 0x40; // int32 - CCSPlayerController_InGameMoneyServices 
-	}
+	}		namespace pawn {
+			constexpr std::ptrdiff_t m_vOldOrigin = 0x1340; // Vector
+			constexpr std::ptrdiff_t m_iHealth = 0x4BC; // int32
+			constexpr std::ptrdiff_t m_iTeamNum = 0x557; // uint8
+			constexpr std::ptrdiff_t m_bIsScoped = 0x2B00; // bool
+			constexpr std::ptrdiff_t m_ArmorValue = 0x2B2C; // int32
+			constexpr std::ptrdiff_t m_bIsDefusing = 0x2B02; // bool
+			constexpr std::ptrdiff_t m_vecAbsVelocity = 0x568; // Vector
 
-	namespace pawn {
-		constexpr std::ptrdiff_t m_vOldOrigin = 0x1340; // Vector
-		constexpr std::ptrdiff_t m_iHealth = 0x4BC; // int32
-		constexpr std::ptrdiff_t m_iTeamNum = 0x557; // uint8
-		constexpr std::ptrdiff_t m_bIsScoped = 0x2B00; // bool
-		constexpr std::ptrdiff_t m_ArmorValue = 0x2B2C; // int32
-		constexpr std::ptrdiff_t m_bIsDefusing = 0x2B02; // bool
-		constexpr std::ptrdiff_t m_vecAbsVelocity = 0x568; // Vector
+			constexpr std::ptrdiff_t m_pGameSceneNode = 0x4A0; // CGameSceneNode*
+			constexpr std::ptrdiff_t m_angEyeAngles = 0x41E0; // QAngle (pitch, yaw, roll) - C_CSPlayerPawn
+			
+			constexpr std::ptrdiff_t m_entitySpottedState = 0x2AE8; // EntitySpottedState_t
+			constexpr std::ptrdiff_t m_bSpottedByMask = 0xC; // uint32[2] - EntitySpottedState_t
+			
+			constexpr std::ptrdiff_t m_flFlashOverlayAlpha = 0x13A4; // float32 - C_CSPlayerPawnBase 
+			
+			constexpr std::ptrdiff_t m_pWeaponServices = 0x11A8; // CPlayer_WeaponServices*
+			constexpr std::ptrdiff_t m_hActiveWeapon = 0x60; // CHandle<C_BasePlayerWeapon> - CPlayer_WeaponServices
+			constexpr std::ptrdiff_t m_WeaponCount = 0x50; // int32 - weapon list size
+			constexpr std::ptrdiff_t m_hMyWeapons = 0x58; // weapon handle array start
+			constexpr std::ptrdiff_t m_AttributeManager = 0x1148; // C_AttributeContainer - C_EconEntity
+			constexpr std::ptrdiff_t m_Item = 0x50; // C_EconItemView - C_AttributeContainer
+			constexpr std::ptrdiff_t m_iItemDefinitionIndex = 0x1BA; // uint16 - C_EconItemView
+			constexpr std::ptrdiff_t m_iClip1 = 0x2590; // int32 - C_BasePlayerWeapon
+			constexpr std::ptrdiff_t m_bInReload = 0x26A4; // bool - C_CSWeaponBase
+			constexpr std::ptrdiff_t m_pObserverServices = 0x11A8; // CPlayer_ObserverServices*
+			constexpr std::ptrdiff_t m_pViewModelServices = 0x1368; // CPlayer_ViewModelServices*
+			constexpr std::ptrdiff_t m_hViewModel = 0x40; // CHandle - view model
 
-		constexpr std::ptrdiff_t m_pGameSceneNode = 0x4A0; // CGameSceneNode*
-		constexpr std::ptrdiff_t m_angEyeAngles = 0x41E0; // QAngle (pitch, yaw, roll) - C_CSPlayerPawn
-		
-		constexpr std::ptrdiff_t m_entitySpottedState = 0x2AE8; // EntitySpottedState_t
-		constexpr std::ptrdiff_t m_bSpottedByMask = 0xC; // uint32[2] - EntitySpottedState_t
-		
-		constexpr std::ptrdiff_t m_flFlashOverlayAlpha = 0x13A4; // float32 - C_CSPlayerPawnBase 
-		
-		constexpr std::ptrdiff_t m_pWeaponServices = 0x1190; // CPlayer_WeaponServices*
-		constexpr std::ptrdiff_t m_hActiveWeapon = 0x60; // CHandle<C_BasePlayerWeapon> - CPlayer_WeaponServices
-		constexpr std::ptrdiff_t m_AttributeManager = 0x1130; // C_AttributeContainer - C_EconEntity
-		constexpr std::ptrdiff_t m_Item = 0x50; // C_EconItemView - C_AttributeContainer
-		constexpr std::ptrdiff_t m_iItemDefinitionIndex = 0x10C2; // uint16 - C_EconItemView
-		constexpr std::ptrdiff_t m_iClip1 = 0x2590; // int32 - C_BasePlayerWeapon
-		constexpr std::ptrdiff_t m_bInReload = 0x26A4; // bool - C_CSWeaponBase
-		constexpr std::ptrdiff_t m_pObserverServices = 0x11A8; // CPlayer_ObserverServices*
-
-		// Skin changer netvars (C_BasePlayerWeapon / C_EconEntity fallback fields)
-		constexpr std::ptrdiff_t m_nFallbackPaintKit = 0x31D8; // int32 - paint kit index
-		constexpr std::ptrdiff_t m_flFallbackWear = 0x31DC; // float - wear (0=FN, 1=BS)
-		constexpr std::ptrdiff_t m_nFallbackSeed = 0x31E0; // int32 - pattern seed
-		constexpr std::ptrdiff_t m_nFallbackStatTrak = 0x31E4; // int32 - stattrak kills (-1 = none)
-		constexpr std::ptrdiff_t m_iItemIDHigh = 0x2FC0; // int32 - force fallback values
-		constexpr std::ptrdiff_t m_OriginalOwnerXuidLow = 0x31F4; // int32 - ownership bypass
-	}
+			// Skin changer netvars (C_BasePlayerWeapon / C_EconEntity fallback fields)
+			// These are RELATIVE to the weapon entity base (not to m_AttributeManager + m_Item)
+			constexpr std::ptrdiff_t m_nFallbackPaintKit = 0x15F8; // int32 - paint kit index
+			constexpr std::ptrdiff_t m_flFallbackWear = 0x1600; // float - wear (0=FN, 1=BS)
+			constexpr std::ptrdiff_t m_nFallbackSeed = 0x15FC; // int32 - pattern seed
+			constexpr std::ptrdiff_t m_nFallbackStatTrak = 0x1604; // int32 - stattrak kills (-1 = none)
+			constexpr std::ptrdiff_t m_iItemIDHigh = 0x1D0; // int32 - on C_EconItemView sub-object
+			constexpr std::ptrdiff_t m_iAccountID = 0x1D8; // int32 - account ID for ownership
+			constexpr std::ptrdiff_t m_OriginalOwnerXuidLow = 0x15F0; // int32 - ownership bypass
+		}
 
 	namespace bomb {
 		constexpr std::ptrdiff_t m_isPlanted = 0x8; // unk
