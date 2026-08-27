@@ -115,7 +115,20 @@ is impossible to miss.
 
 ## 🛠️ Developer Instructions
 
-### Linux (Omarchy)
+### Setting up on a new computer (Linux)
+
+**Prerequisites** — a C++20 compiler, CMake ≥ 3.24, and the dev libraries below:
+
+```bash
+# Arch / Omarchy
+sudo pacman -S --needed base-devel cmake curl glfw-x11 libx11 libxrandr mesa ttf-dejavu linux-headers
+
+# Debian / Ubuntu
+sudo apt install build-essential cmake libcurl4-openssl-dev libgl1-mesa-dev \
+    libglfw3-dev libx11-dev libxrandr-dev libxtst-dev
+```
+
+**Clone and build:**
 
 ```bash
 git clone --recursive -b omarchy-port https://github.com/jonahchang207/sourcesight-linux
@@ -123,6 +136,35 @@ cd sourcesight-linux
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ```
+
+**Run it:**
+
+1. Start CS2 and switch to **fullscreen-windowed** mode (the overlay does not
+   render over true fullscreen).
+2. From the repo root, run `./build/sourcesight` — the binary looks for
+   `config.json` and the `maps/` folder next to itself, so either copy them
+   into `build/` or run from the repo root. `config.json` is user-specific
+   and gitignored; the overlay runs with defaults if it is missing.
+3. `Insert` toggles the menu, `End` saves and exits. Linux is click-through
+   while playing, so right `Shift` is intentionally not a toggle key (it
+   reaches CS2 and would walk-close the menu).
+
+**Optional — aimbot kernel mouse:** the `aim` feature needs the vendored
+kernel driver (installed once per machine):
+
+```bash
+sudo ./drivers/install.sh   # builds person_mouse.ko, installs udev rules, loads it
+# log out and back in so your user joins the person-mouse group
+```
+
+**When CS2 patches:** the global signatures (entity list, view matrix, …) are
+re-scanned automatically at startup, but the hardcoded member offsets in
+`src/core/offsets/Offsets.hpp` (`m_hPawn`, `m_iHealth`, `m_iTeamNum`, …) can
+shift with any game update. Refresh them against a fresh schema dump
+(`sezzyaep/CS2-OFFSETS` or `a2x/cs2-dumper`). If players stop resolving, or
+resolve but read as dead (health 0), the offsets are stale — the one-shot
+`[player] diag:` / `[weapon] diag:` logs in `Player.cpp` / `Weapon.cpp` name
+the exact failing stage.
 
 ### Windows
 

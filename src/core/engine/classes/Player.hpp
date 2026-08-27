@@ -6,8 +6,8 @@
 class Player {
 public:
     Player() {}
-    Player(int index, uintptr_t el, uintptr_t pel, uintptr_t le) 
-        : index(index), entity_list(el), pawn_entity_list(pel), list_entry(le){}
+    Player(int index, uintptr_t el, uintptr_t le) 
+        : index(index), entity_list(el), list_entry(le){}
 
     bool Update();
     bool GetBounds(view_matrix_t matrix, Vec2_t size, std::pair<Vec2_t, Vec2_t>& bounds);
@@ -48,8 +48,7 @@ public:
     ObserverServices observer_services;
 private:
     uintptr_t list_entry;
-    uintptr_t entity_list;        // Controller entity list
-    uintptr_t pawn_entity_list;   // Pawn entity list (for pawn handle resolution)
+    uintptr_t entity_list;        // Global entity list (shared by controllers, pawns and weapons)
 
     uintptr_t pawn;
     uintptr_t controller;

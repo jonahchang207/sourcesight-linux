@@ -1,6 +1,7 @@
 #include "Player.hpp"
 
 #include "Weapon.hpp"
+#include "Game.hpp"
 #include "core/engine/Engine.hpp"
 #include "core/offsets/Dumper.hpp"
 
@@ -10,23 +11,29 @@ bool Player::Update() {
 	if (!Engine::GetProcess())
 		return false;
 
+	// One-shot diagnostics: report the first failing stage so offset/struct
+	// issues are identifiable from a single in-game run.
 	if (!GetController()) {
-		//LOGF(WARNING, "Failed to GET controller for entity index({})", index);
+		static bool diag = false;
+		if (!diag) { diag = true; LOGF(WARNING, "[player] diag: GetController failed (index={})", index); }
 		return false;
 	}
 
 	if (!GetPawn()) {
-		//LOGF(WARNING, "Failed to GET pawn for entity index({})", index);
+		static bool diag = false;
+		if (!diag) { diag = true; LOGF(WARNING, "[player] diag: GetPawn failed (index={})", index); }
 		return false;
 	}
 
 	if (!UpdateController()) {
-		//LOGF(WARNING, "Failed to UPDATE controller for entity index({})", index);
+		static bool diag = false;
+		if (!diag) { diag = true; LOGF(WARNING, "[player] diag: UpdateController failed (index={})", index); }
 		return false;
 	}
 
 	if (!UpdatePawn()) {
-		//LOGF(WARNING, "Failed to UPDATE pawn for entity index({})", index);
+		static bool diag = false;
+		if (!diag) { diag = true; LOGF(WARNING, "[player] diag: UpdatePawn failed (index={})", index); }
 		return false;
 	}
 
@@ -44,22 +51,29 @@ bool Player::GetController() {
 
 bool Player::GetPawn() {
 	auto p = Engine::GetProcess();
-	auto client = Engine::GetClient();
 
-    const auto entity_pawn_address = p->read<std::uint32_t>(controller + offsets::controller::m_hPawn);
+	const auto entity_pawn_handle = p->read<std::uint32_t>(controller + offsets::controller::m_hPawn);
 
-	if (!entity_pawn_address)
+	if (!entity_pawn_handle)
 		return false;
 
-	this->pawn_controller_addr = entity_pawn_address;
+	this->pawn_controller_addr = entity_pawn_handle;
 
-	// Entity bucket access: pawn_entity_list + 0x0 + stride * (handle>>9)
-	auto entity_pawn_list_entry = p->read<uintptr_t>(this->pawn_entity_list + 0x0 + 0x8 * ((entity_pawn_address & 0x7FFF) >> 9));
+	// Pawns live in the same global entity list as everything else.
+	this->pawn = Game::ResolveHandle(this->entity_list, entity_pawn_handle);
 
-	if (!entity_pawn_list_entry)
-		return false;
-
-	this->pawn = p->read<uintptr_t>(entity_pawn_list_entry + 0x70 * (entity_pawn_address & 0x1FF)); /*0x78*/
+	static bool pawn_diag_done = false;
+	if (!this->pawn && !pawn_diag_done) {
+		pawn_diag_done = true;
+		const uintptr_t chunk = p->read<uintptr_t>(this->entity_list + 8 * (((entity_pawn_handle & 0x7FFF) >> 9) & 0x3F));
+		const uintptr_t slot = chunk ? chunk + 0x70 * (entity_pawn_handle & 0x1FF) : 0;
+		LOGF(WARNING,
+			"Pawn resolution failed: el=0x{:X} ctrl=0x{:X} handle=0x{:08X} idx={} chunk=0x{:X} slot=0x{:X} slot_handle=0x{:08X} slot_inst=0x{:X}",
+			this->entity_list, this->controller, entity_pawn_handle, entity_pawn_handle & 0x7FFF,
+			chunk, slot,
+			slot ? p->read<std::uint32_t>(slot + 0x10) : 0,
+			slot ? p->read<uintptr_t>(slot) : 0);
+	}
 
 	return this->pawn != 0;
 }
@@ -104,8 +118,11 @@ bool Player::UpdatePawn() {
 
 	this->pos = p->read<Vec3_t>(pawn + offsets::pawn::m_vOldOrigin);
 
-	if (this->pos.zero())
+	if (this->pos.zero()) {
+		static bool diag = false;
+		if (!diag) { diag = true; LOGF(WARNING, "[player] diag: pos is zero (pawn=0x{:X} origin=0x{:X})", this->pawn, this->pawn + offsets::pawn::m_vOldOrigin); }
 		return false;
+	}
 
 	this->vel = p->read<Vec3_t>(pawn + offsets::pawn::m_vecAbsVelocity);
 
@@ -184,18 +201,27 @@ bool Player::UpdateWeapon() {
 
 	auto weapon_services = p->read<uintptr_t>(this->pawn + offsets::pawn::m_pWeaponServices);
 
-	if (!weapon_services)
+	if (!weapon_services) {
+		static bool diag = false;
+		if (!diag) { diag = true; LOGF(WARNING, "[player] diag: weapon_services=0 (pawn=0x{:X})", this->pawn); }
 		return false;
+	}
 
 	auto active_weapon_index = p->read<int>(weapon_services + offsets::pawn::m_hActiveWeapon);
 
-	if (!active_weapon_index)
+	if (!active_weapon_index) {
+		static bool diag = false;
+		if (!diag) { diag = true; LOGF(WARNING, "[player] diag: active_weapon_index=0 (ws=0x{:X})", weapon_services); }
 		return false;
+	}
 
-	auto weapon = Weapon(this->entity_list, this->pawn_entity_list, active_weapon_index);
+	auto weapon = Weapon(this->entity_list, active_weapon_index);
 
-	if (!weapon.Update())
+	if (!weapon.Update()) {
+		static bool diag = false;
+		if (!diag) { diag = true; LOGF(WARNING, "[player] diag: Weapon::Update failed (handle=0x{:X})", active_weapon_index); }
 		return false;
+	}
 
 	this->weapon = weapon;
 	this->ammo = weapon.ammo;

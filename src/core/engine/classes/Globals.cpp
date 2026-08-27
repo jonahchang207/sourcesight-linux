@@ -20,9 +20,10 @@ bool Globals::Update() {
 	this->max_clients = p->read<int>(this->address + offsets::global::maxClients);
 	this->in_match = this->max_clients > 1; // In the lobby, it seems that it still counts one
 
+	// CGlobalVarsBase::currentMapName is a pointer to the map name string.
 	auto map_name_addr = p->read<DWORD64>(this->address + offsets::global::currentMapName);
 
-	if (!p->read_raw(map_name_addr, this->map_name, sizeof(this->map_name)))
+	if (!map_name_addr || !p->read_raw(map_name_addr, this->map_name, sizeof(this->map_name)))
 		return false;
 
 	return true;

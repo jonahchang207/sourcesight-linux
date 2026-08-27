@@ -66,8 +66,8 @@ bool Cache::RefreshImpl() {
     bool log_now = (cache_tick <= 5) || (now_cache_diag - last_cache_diag > 3s);
     if (log_now) {
         last_cache_diag = now_cache_diag;
-        LOGF(INFO, "[cache] tick={} el=0x{:X} pel=0x{:X} le=0x{:X} mc={} map='{}' c4=0x{:X}",
-             cache_tick, game.entity_list, game.pawn_entity_list, game.list_entry, globals.max_clients,
+        LOGF(INFO, "[cache] tick={} el=0x{:X} le=0x{:X} mc={} map='{}' c4=0x{:X}",
+             cache_tick, game.entity_list, game.list_entry, globals.max_clients,
              globals.map_name, bomb.carrier);
     }
 
@@ -75,7 +75,7 @@ bool Cache::RefreshImpl() {
     scan.reserve(globals.max_clients);
     int failed_updates = 0;
     for (int i = 0; i < globals.max_clients; i++) {
-        auto player = Player(i, game.entity_list, game.pawn_entity_list, game.list_entry);
+        auto player = Player(i, game.entity_list, game.list_entry);
 
         if (!player.Update()) {
             failed_updates++;

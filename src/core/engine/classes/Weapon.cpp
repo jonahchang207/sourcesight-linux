@@ -1,5 +1,6 @@
 #include "common.hpp"
 #include "Weapon.hpp"
+#include "Game.hpp"
 #include "core/engine/Engine.hpp"
 #include "core/offsets/Dumper.hpp"
 #include "assets/fonts/WeaponIcons.h"
@@ -10,22 +11,22 @@ bool Weapon::Update() {
 	if (!p)
 		return false;
 
-    if (!pawn_entity_list)
-        return false;
-
-    // Weapon entities are in the pawn entity list (C_BasePlayerWeapon)
-    uintptr_t bucket_ptr = p->read<uintptr_t>(pawn_entity_list + 0x0 + 0x8 * ((slot_index & 0x7FFF) >> 9));
-    if (!bucket_ptr)
-        return false;
-
-    uintptr_t weapon_ptr = p->read<uintptr_t>(bucket_ptr + 0x70 * (slot_index & 0x1FF));
-	if (!weapon_ptr)
+    // Weapon handles resolve through the same global entity list as
+    // controllers and pawns.
+    uintptr_t weapon_ptr = Game::ResolveHandle(entity_list, static_cast<std::uint32_t>(slot_index));
+	if (!weapon_ptr) {
+		static bool diag = false;
+		if (!diag) { diag = true; LOGF(WARNING, "[weapon] diag: ResolveHandle failed (handle=0x{:X} el=0x{:X})", slot_index, entity_list); }
 		return false;
+	}
 
 	this->item_index = p->read<short>(weapon_ptr + offsets::pawn::m_AttributeManager + offsets::pawn::m_Item + offsets::pawn::m_iItemDefinitionIndex);
 
-	if (!this->item_index)
+	if (!this->item_index) {
+		static bool diag = false;
+		if (!diag) { diag = true; LOGF(WARNING, "[weapon] diag: item_index=0 (weapon=0x{:X})", weapon_ptr); }
 		return false;
+	}
 
     this->name = ToString();	
     this->icon = ToIcon();

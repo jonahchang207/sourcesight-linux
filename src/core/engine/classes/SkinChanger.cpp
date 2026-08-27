@@ -27,22 +27,6 @@ void SkinChanger::ForceUpdate() {
     g_force_update = true;
 }
 
-// Resolve a CS2 entity handle to an entity address using the two-level
-// bucket resolution: entity_list + 0x0 + stride * (handle>>9), then
-// entry + 0x70 * (handle & 0x1FF).
-static uintptr_t ResolveHandle(uintptr_t entity_list, uint32_t handle) {
-    if (!handle || handle == 0xFFFFFFFF)
-        return 0;
-
-    auto p = Engine::GetProcess();
-    if (!p) return 0;
-
-    const uint32_t idx = handle & 0x7FFF;
-    const uintptr_t bucket = p->read<uintptr_t>(entity_list + 0x0 + 0x8 * (idx >> 9));
-    if (!bucket) return 0;
-
-    return p->read<uintptr_t>(bucket + 0x70 * (idx & 0x1FF));
-}
 
 bool SkinChanger::ApplyToWeapon(uintptr_t weapon_ptr, const SkinOverride& skin) {
     auto p = Engine::GetProcess();
@@ -149,7 +133,10 @@ void SkinChanger::Run() {
     if (!pawn_handle || pawn_handle == 0xFFFFFFFF)
         return;
 
-    const uintptr_t local_pawn = ResolveHandle(cache.game.pawn_entity_list, pawn_handle);
+    // Pawns and weapons resolve through the single global entity list.
+    const uintptr_t entity_list = cache.game.entity_list;
+
+    const uintptr_t local_pawn = Game::ResolveHandle(entity_list, pawn_handle);
     if (!local_pawn)
         return;
 
@@ -160,18 +147,24 @@ void SkinChanger::Run() {
     if (!weapon_services)
         return;
 
+    // m_hMyWeapons is a C_NetworkUtlVectorBase: size lives at +0x0 and the
+    // element array is a heap pointer at +0x8 (not stored inline).
     const int weapon_count = std::min(
-        p->read<int32_t>(weapon_services + 0x50), 64);
+        p->read<int32_t>(weapon_services + offsets::pawn::m_hMyWeapons), 64);
+    const uintptr_t weapons_ptr = p->read<uintptr_t>(
+        weapon_services + offsets::pawn::m_hMyWeapons + 0x8);
+    if (!weapons_ptr)
+        return;
 
     for (int i = 0; i < weapon_count; ++i) {
         const uint32_t weapon_handle = p->read<uint32_t>(
-            weapon_services + 0x58 + i * 0x4);
+            weapons_ptr + i * 0x4);
 
         if (!weapon_handle || weapon_handle == 0xFFFFFFFF)
             continue;
 
-        const uintptr_t weapon_entity = ResolveHandle(
-            cache.game.pawn_entity_list, weapon_handle);
+        const uintptr_t weapon_entity = Game::ResolveHandle(
+            entity_list, weapon_handle);
 
         if (!weapon_entity)
             continue;

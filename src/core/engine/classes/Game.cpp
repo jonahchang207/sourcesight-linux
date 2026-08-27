@@ -64,18 +64,33 @@ bool Game::UpdateEntityList() {
         }
     }
 
-    // Read pawn entity list (for C_CSPlayerPawn entities)
-    if (offsets::pawnEntityList != 0) {
-        const uintptr_t pel_ptr = p->read<DWORD64>(client.base + offsets::pawnEntityList);
-        if (pel_ptr != 0) {
-            this->pawn_entity_list = pel_ptr;
-            static bool pel_logged = false;
-            if (!pel_logged) {
-                pel_logged = true;
-                LOGF(INFO, "[game] pawn entity list resolved: pel=0x{:X}", this->pawn_entity_list);
-            }
-        }
-    }
-
     return this->entity_list != 0;
+}
+
+uintptr_t Game::ResolveHandle(uintptr_t entity_list, std::uint32_t handle)
+{
+    // Handle sentinels, exactly as CS2 itself treats them:
+    // 0xFFFFFFFF == invalid, 0xFFFFFFFE == entity deleted in progress.
+    if (!handle || handle == 0xFFFFFFFF || handle == 0xFFFFFFFE || !entity_list)
+        return 0;
+
+    auto p = Engine::GetProcess();
+    if (!p)
+        return 0;
+
+    const std::uint32_t idx = handle & 0x7FFF; // low 15 bits: entity index
+
+    // Pointer array of chunks: entry = ((idx >> 9) & 0x3F)
+    const uintptr_t chunk = p->read<uintptr_t>(entity_list + 8 * ((idx >> 9) & 0x3F));
+    if (!chunk)
+        return 0;
+
+    // Each chunk holds 512 slots with stride 0x70; the entity instance
+    // pointer sits at the start of its slot (+0x0). Do NOT validate the
+    // slot's +0x10 field against the handle here: on this build that field
+    // is not the entity handle, so the check rejects every entity. This
+    // validation was the regression that made all player updates fail.
+    const uintptr_t slot = chunk + 0x70 * (idx & 0x1FF);
+
+    return p->read<uintptr_t>(slot);
 }
