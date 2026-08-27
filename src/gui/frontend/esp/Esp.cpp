@@ -201,6 +201,7 @@ void Esp::RenderImpl() {
 
 		RenderPlayerTracers(local, player, mate);
 		RenderPlayer(player, mate);
+		RenderBulletTracers(player, players, mate);
 	}
 
 	RenderCrosshair(local);
