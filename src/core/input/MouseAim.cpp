@@ -359,44 +359,54 @@ bool MouseAim::SelectNearestEnemy() {
     int best_index = -1;
     float best_x = 0.0f;
     float best_y = 0.0f;
-    // When visible_only is on, only pass 0 runs (visible targets only).
-    // When off, pass 0 = visible, pass 1 = hidden fallback.
-    // Visibility = game-traced LOS (spotted) AND no player blocking.
-    const int max_passes = cfg::aim::visible_only ? 1 : 2;
-    for (int pass = 0; pass < max_passes && best_index < 0; ++pass) {
-        float best_dist = std::numeric_limits<float>::max();
-        for (auto& player : cache.players) {
-            if (!player.alive || player.localplayer)
-                continue;
-            if (player.team == local.team)
-                continue;
+    float best_dist = std::numeric_limits<float>::max();
 
-            Vec2_t screen;
-            if (!PlayerAimScreen(player, matrix, screen_w_, screen_h_, screen))
-                continue;
+    for (auto& player : cache.players) {
+        if (!player.alive || player.localplayer)
+            continue;
+        if (player.team == local.team)
+            continue;
 
-            const float dx = screen.x - ref_x;
-            const float dy = screen.y - ref_y;
-            const float dist_sq = dx * dx + dy * dy;
-            if (dist_sq > fov_sq)
-                continue;
-            // Pass 0: prefer targets that are visible (map raytrace + no player blocker).
-            if (pass == 0) {
-                const Vec3_t head = PlayerHeadWorld(player);
-                // 1) Map raytrace: is the path from eye to head blocked by world geometry?
-                const bool map_clear = MapRaytrace::IsVisible(
-                    {eye.x, eye.y, eye.z}, {head.x, head.y, head.z});
-                // 2) Player occlusion: is another player body-blocking the shot?
-                const bool no_player_block = !HeadOccluded(eye, head, cache.players, player.index);
-                if (!map_clear || !no_player_block)
-                    continue;
-            }
-            if (dist_sq < best_dist) {
-                best_dist = dist_sq;
-                best_x = screen.x;
-                best_y = screen.y;
-                best_index = player.index;
-            }
+        Vec2_t screen;
+        if (!PlayerAimScreen(player, matrix, screen_w_, screen_h_, screen))
+            continue;
+
+        const float dx = screen.x - ref_x;
+        const float dy = screen.y - ref_y;
+        const float dist_sq = dx * dx + dy * dy;
+        if (dist_sq > fov_sq)
+            continue;
+
+        // ── Visibility check: ALWAYS enforced to prevent wall-tracking ──
+        // 1) Map raytrace: is the path from eye to head blocked by world geometry?
+        //    Returns true when no .tri file is loaded (assume visible).
+        const Vec3_t head = PlayerHeadWorld(player);
+        const bool map_clear = MapRaytrace::IsVisible(
+            {eye.x, eye.y, eye.z}, {head.x, head.y, head.z});
+
+        // 2) Player occlusion: is another player body-blocking the shot?
+        const bool no_player_block = !HeadOccluded(eye, head, cache.players, player.index);
+
+        // 3) Spotted state: has CS2 flagged this enemy as visible?
+        //    When visible_only is on, require spotted. When off, use as
+        //    a soft preference (prefer spotted targets but allow unspotted
+        //    if nothing else is in range).
+        const bool spotted_ok = cfg::aim::visible_only ? player.spotted : true;
+
+        // Block if world geometry or another player is in the way.
+        // This prevents aiming through walls even when visible_only is off.
+        if (!map_clear || !no_player_block)
+            continue;
+
+        // When visible_only is on, also require spotted state.
+        if (!spotted_ok)
+            continue;
+
+        if (dist_sq < best_dist) {
+            best_dist = dist_sq;
+            best_x = screen.x;
+            best_y = screen.y;
+            best_index = player.index;
         }
     }
 
