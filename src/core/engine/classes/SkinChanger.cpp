@@ -28,7 +28,7 @@ void SkinChanger::ForceUpdate() {
 }
 
 // Resolve a CS2 entity handle to an entity address using the two-level
-// bucket resolution: entity_list + 0x10 + stride * (handle>>9), then
+// bucket resolution: entity_list + 0x0 + stride * (handle>>9), then
 // entry + 0x70 * (handle & 0x1FF).
 static uintptr_t ResolveHandle(uintptr_t entity_list, uint32_t handle) {
     if (!handle || handle == 0xFFFFFFFF)
@@ -38,7 +38,7 @@ static uintptr_t ResolveHandle(uintptr_t entity_list, uint32_t handle) {
     if (!p) return 0;
 
     const uint32_t idx = handle & 0x7FFF;
-    const uintptr_t bucket = p->read<uintptr_t>(entity_list + 0x10 + 0x8 * (idx >> 9));
+    const uintptr_t bucket = p->read<uintptr_t>(entity_list + 0x0 + 0x8 * (idx >> 9));
     if (!bucket) return 0;
 
     return p->read<uintptr_t>(bucket + 0x70 * (idx & 0x1FF));
