@@ -2,155 +2,164 @@
 
 ## Current State (August 26, 2026)
 
-### Critical Bug: Entity List is NULL (`el=0x0`)
-The **root cause** of ESP not working is that `game.entity_list = 0x0`. Diagnostic output:
-```
-[cache] tick=1 el=0x0 le=0x0 mc=64 map='' c4=0x0
-[cache] players: 0 succeeded, 64 failed, max_clients=64
-[esp] tick=1 snap=0 alive=0 enemies=0 local_hp=0 vm_ok=true
-```
-
-**What this means:**
-- The Dumper pattern scan found the entity list offset successfully ("Successfully dumped offsets...")
-- BUT `p->read<uintptr_t>(client.base + offsets::entityList)` returns 0
-- The view matrix IS valid (`vm_ok=true`), so `client.base` is correct
-- The entity list pattern may be stale for the user's CS2 build
-
-**What was added to fix it:**
-- `Game::UpdateEntityList()` now retries every tick and calls `Dumper::RescanEntityList()` on first failure
-- `Dumper::RescanEntityList()` tries 3 patterns (original + 2 alternatives)
-- Extensive diagnostic logging at every level
-
-**Next step:** User needs to run the tool again after rebuild and check if re-scan found a valid offset. If all 3 patterns fail, need to find the correct pattern for their CS2 build.
+### Release: v0.3.0
+GitHub release: https://github.com/jonahchang207/sourcesight-linux/releases/tag/v0.3.0
 
 ---
 
-## What Was Built This Session
+## CRITICAL: Player ESP Stopped Working (NEW ISSUE — UNRESOLVED)
 
-### 1. Skin Changer — Complete Rewrite (`src/core/engine/classes/SkinChanger.cpp`)
-- **Fixed entity resolution**: Two-level bucket resolution (`handle & 0x7FFF >> 9` + `& 0x1FF`)
-- **Fixed weapon list traversal**: Offsets `+0x50` (count) and `+0x58` (handles) for `CPlayer_WeaponServices`
-- **Fixed m_iItemIDHigh write**: Now writes to `item_addr` (C_EconItemView sub-object) not directly to weapon_ptr
-- **Added read-back verification**: Confirms writes actually stuck
-- **Added hide/show toggle**: Mask=0 hides weapon, restore on next frame forces model rebuild
-- **One-shot diagnostic logging**: Logs weapon EntityIDHigh, DefIdx, PaintKit on first apply
-- **`ForceUpdate()` method**: Called from menu "Apply" button
+After the skin changer offset fix commit (5ce84ee), the player ESP stopped rendering players. All diagnostics show `snap=0 alive=0 enemies=0`. This means:
+- The entity list pointer IS resolving (no longer 0x0)
+- But player updates are all failing (0 succeeded, 64 failed)
+- The entity handle resolution with the new +16 offset may be incorrect
 
-### 2. Skin Preset Save/Load (`src/config/Config.cpp`)
-- Active skins saved to `config.json` under `"skins"` key
-- JSON object keyed by weapon ID (as string), each with paint_kit, wear, seed, stattrak
-- Loaded on startup, `ForceUpdate()` called after load
+**Root cause hypothesis:** The +16 offset added to entity bucket access in Player.cpp and SkinChanger.cpp may be wrong for this CS2 build. The old +0x0 offset was working for player resolution but the skin changer offsets were wrong. Now the skin offsets are fixed but the +16 broke player resolution.
 
-### 3. Skin Database — Per-Weapon Presets (`src/core/engine/classes/SkinDatabase.hpp`)
-- `SkinsByWeapon()` — maps weapon ID → vector of skin presets
-- 30+ weapons with 15-25 skins each (rifles, SMGs, shotguns, snipers, pistols, knives)
-- Category-based filtering in the menu
+**Key evidence:** Before the +16 change, ESP worked (players rendered). After +16, ESP broke. The skin changer offsets are from a Windows-based UC thread — the Linux entity list structure may differ.
 
-### 4. UI Overhaul — Grid-Based Skin Browser (`src/gui/frontend/menu/Menu.cpp`)
-- Category tabs: All / Rifles / SMGs / Shotguns / Snipers / Pistols / Knives
-- 100×52px weapon card grid with WeaponIcons font glyphs
-- Cards glow green when skin active, blue when selected
-- Right-side config panel with skin dropdown, wear/seed/stattrak, Apply/Reset
-- Active skins summary at bottom
+**What to try:**
+1. Revert entity resolution to +0x0 (remove the +16) — this was working for ESP
+2. The skin changer should still work with +0x0 if the entity list pointer from our pattern scan already accounts for the +16 offset
+3. If skins still don't work with +0x0, the issue is the skin offsets themselves, not entity resolution
 
-### 5. Aim Toggle Fix (`src/core/input/MouseAim.cpp`)
-- Changed `g_hotkey.Sync(cfg::aim::hotkey && cfg::aim::enabled)` → `g_hotkey.Sync(cfg::aim::hotkey)`
-- Hotkey thread now stays alive when aim is disabled, so MB5 can re-enable
+---
 
-### 6. Visibility Check — Map Raytracing (`src/core/engine/classes/MapRaytrace.cpp`)
-- KD-tree acceleration against parsed `.tri` map collision files
-- Möller-Trumbore ray-triangle intersection
-- Auto-detects map changes from CS2's GlobalVars
-- Falls back to player-only occlusion if no .tri file loaded
-- Files: `MapRaytrace.hpp`, `MapRaytrace.cpp`
+## Skin Changer — Offsets Fixed But Skins Not Visually Appearing
 
-### 7. Hyprland Fix (`scripts/install-omarchy.sh`)
-- Added `fullscreen = true` to Lua rules (was missing)
+The offsets were corrected from a verified UC working external skin changer:
 
-### 8. Map Extraction Tools
-- `tools/extract_maps.py` — Python tool using ValveResourceFormat
-- `tools/extract_maps.sh` — Bash wrapper using source2viewer + cs2-map-parser
-- Supports de_dust2, de_mirage, de_inferno, de_overpass, de_nuke, de_ancient, de_anubis, de_vertigo, cs_office
+| Offset | Old (wrong) | New (correct) |
+|--------|-------------|---------------|
+| `m_pWeaponServices` | 0x1190 | 0x11A8 |
+| `m_AttributeManager` | 0x1130 | 0x1148 |
+| `m_iItemDefinitionIndex` | 0x10C2 | 0x1BA |
+| `m_nFallbackPaintKit` | 0x31D8 | 0x15F8 |
+| `m_flFallbackWear` | 0x31DC | 0x1600 |
+| `m_nFallbackSeed` | 0x31E0 | 0x15FC |
+| `m_nFallbackStatTrak` | 0x31E4 | 0x1604 |
+| `m_iItemIDHigh` | 0x2FC0 | 0x1D0 |
+| `m_OriginalOwnerXuidLow` | 0x31F4 | 0x15F0 |
 
-### 9. Diagnostics
-- Cache: Logs entity list, list_entry, max_clients, map name, player counts (first 5 ticks + every 3s)
-- ESP: Logs snapshot size, alive count, enemy count, local HP, view matrix validity
-- Skin: Logs active skin count, local player state (first 5 ticks)
-- Game: Logs entity list resolution with retry/re-scan
+**What's needed:** The SkinDatabase.hpp has hardcoded paint kit IDs that may be wrong. Need to verify the actual paint kit IDs for each weapon from CS2's item schema. The skin changer writes paint kit IDs but if they're wrong, the game shows default skins or no skin.
+
+**Paint kit ID source:** CS2 stores these in `items_game.txt` (inside `pak01_dir.vpk`). The paint kit IDs are the `id` fields in the `paint_kits` section. Need to extract and map them.
+
+---
+
+## What Was Fixed This Session
+
+### 1. Entity List Resolution (CRITICAL BUG)
+- `game.UpdateEntityList()` was stuck on `#endif` preprocessor line — never executed
+- Fixed by putting it on its own line after `#endif`
+- Added `Dumper::RescanEntityList()` with 3 alternative patterns
+
+### 2. Skin Changer — Complete Offset Overhaul
+- All offsets corrected from UC working external skin changer
+- Entity resolution changed to +16 offset (BROKE ESP — needs revert)
+
+### 3. Bullet Tracers
+- `RenderBulletTracers()` was defined but never called from render loop
+- Added call inside per-player iteration
+
+### 4. Bomb Timer & Pulsing Border
+- Removed `!bomb.pos.length()` guard that blocked rendering on first plant tick
+- Added bomb timer text in ESP (countdown next to C4 icon)
+- Added pulsing red screen-edge border (1-4Hz, syncs with bomb timer)
+
+### 5. Overlay Focus
+- Linux: queries `hyprctl activewindow -j` to check if CS2 has focus
+- Added `Window::SetVisible()` for cross-platform show/hide
+
+### 6. Scroll Wheel Fix
+- Intercepted GLFW scroll callback, only feeds to ImGui when menu open
+- Prevents overlay from capturing scroll events that cause jumping
+
+### 7. Triggerbot
+- Auto-fires when crosshair on enemy (hold Left Alt)
+- Configurable delay, burst, weapon filter
+- Uses XTest for click injection
+
+### 8. Aimbot Wall Tracking Fix
+- Removed pass-through fallback that allowed aiming through walls
+- Map raytrace visibility check now always enforced
+
+### 9. Glassmorphism Menu Redesign
+- Frosted glass cards, sapphire blue accents
+- Collapsible sections, animated tab transitions
+- All original functionality preserved
+
+---
+
+## What Still Needs Fixing
+
+### CRITICAL: ESP Broken by +16 Entity Resolution Change
+Revert `Player.cpp` and `SkinChanger.cpp` entity resolution back to `+0x0` offset. The ESP was working before this change. The skin changer offsets are the real fix, not the entity resolution change.
+
+### Skin Paint Kit IDs Need Verification
+The `SkinDatabase.hpp` has hardcoded paint kit IDs. These need to be verified against CS2's actual `items_game.txt`. Wrong IDs = default skins showing.
+
+**How to get correct paint kit IDs:**
+1. Extract `items_game.txt` from CS2's `pak01_dir.vpk` using source2viewer
+2. Find the `paint_kits` section
+3. Map weapon names to paint kit IDs
+4. Update `SkinDatabase.hpp` with correct IDs
+
+### Delta Tick Force-Update
+The UC working code sets `delta_tick = -1` on the network game client to force a skin refresh. This hasn't been implemented yet. Without it, skins may only apply once out of 10 attempts.
 
 ---
 
 ## Offsets (Current — `src/core/offsets/Offsets.hpp`)
 
+### Global (pattern-scanned)
 ```
-controller::m_hPawn = 0x83C
-pawn::m_pWeaponServices = 0x1190
-pawn::m_AttributeManager = 0x1130
-pawn::m_Item = 0x50
-pawn::m_iItemDefinitionIndex = 0x10C2
-pawn::m_nFallbackPaintKit = 0x31D8
-pawn::m_flFallbackWear = 0x31DC
-pawn::m_nFallbackSeed = 0x31E0
-pawn::m_nFallbackStatTrak = 0x31E4
-pawn::m_iItemIDHigh = 0x2FC0 (on C_EconItemView, NOT weapon entity directly!)
-pawn::m_OriginalOwnerXuidLow = 0x31F4
-pawn::m_pGameSceneNode = 0x4A0
 entityList signature: "48 8B 3D ?? ?? ?? ?? 48 85 FF 0F 94 C0 83 FE FE"
 viewMatrix signature: "C6 83 ?? ?? 00 00 01 4C 8D 05"
 ```
 
----
-
-## TODO — Windows Map Parser
-
-The user is going to Windows to run the map parser. Steps:
-
-### Option A: C# csphys-extractor (Easiest)
-1. Download from unknowncheats: "CS2 vmdl_c parser" by laithiraq
-2. Requires .NET Framework/.NET Core
-3. Run the tool → select "All maps" → choose `.tri` format
-4. Output: `.tri` files for all competitive maps
-5. Copy the `.tri` files to Linux in `maps/` folder next to the SourceSight executable
-
-### Option B: source2viewer + cs2-map-parser
-1. Download source2viewer: https://github.com/ValveResourceFormat/ValveResourceFormat
-2. Build cs2-map-parser: https://github.com/AtomicBool/cs2-map-parser
-3. For each map:
-   - Open `de_dust2.vpk` in source2viewer
-   - Extract `maps/de_dust2/world_physics.vphys_c`
-   - Decompress with source2viewer CLI
-   - Run vphys_parser on the decompressed file
-   - Output: `de_dust2.tri`
-
-### Map files needed for the user (plays dust2 and mirage):
-- `maps/de_dust2.tri`
-- `maps/de_mirage.tri`
-
-### .tri file format:
-Binary file, each triangle = 9 floats (36 bytes):
+### Controller
 ```
-float p1_x, p1_y, p1_z, p2_x, p2_y, p2_z, p3_x, p3_y, p3_z
+m_hPawn = 0x83C
+m_steamID = 0x900
+m_iszPlayerName = 0x874
+m_bIsLocalPlayerController = 0x908
+m_pInGameMoneyServices = 0x990
+m_iAccount = 0x40
 ```
 
----
+### Pawn
+```
+m_vOldOrigin = 0x1340
+m_iHealth = 0x4BC
+m_iTeamNum = 0x557
+m_pGameSceneNode = 0x4A0
+m_angEyeAngles = 0x41E0
+m_pWeaponServices = 0x11A8
+m_hActiveWeapon = 0x60
+m_WeaponCount = 0x50
+m_hMyWeapons = 0x58
+m_AttributeManager = 0x1148
+m_Item = 0x50
+m_iItemDefinitionIndex = 0x1BA
+m_iItemIDHigh = 0x1D0 (on C_EconItemView)
+m_nFallbackPaintKit = 0x15F8
+m_flFallbackWear = 0x1600
+m_nFallbackSeed = 0x15FC
+m_nFallbackStatTrak = 0x1604
+m_OriginalOwnerXuidLow = 0x15F0
+m_iAccountID = 0x1D8
+m_pViewModelServices = 0x1368
+m_hViewModel = 0x40
+m_pGameSceneNode = 0x4A0
+```
 
-## Remaining Issues
-
-### Entity List NULL (CRITICAL)
-- The Dumper finds the pattern but the read returns 0
-- Re-scan mechanism added (3 patterns tried)
-- If all fail: need to find the correct pattern for user's CS2 build
-- Can check CS2 build with `cs2 --version` or check Steam build ID
-
-### Skin Changer — Skins Not Visually Appearing
-- Memory writes are verified (read-back check)
-- Mesh group mask toggle forces visual refresh
-- But user hasn't tested with the latest build yet (entity list was the blocker)
-- Once entity list is fixed, test skin application
-
-### ESP Not Rendering
-- Directly caused by `el=0x0` (no entity list → no player data → nothing to render)
-- Once entity list is fixed, ESP should work automatically
+### Entity Resolution
+```
+entity_list + 0x10 + 0x8 * ((handle & 0x7FFF) >> 9) = bucket
+bucket + 0x70 * (handle & 0x1FF) = entity
+```
+**NOTE: The +0x10 offset BROKE ESP. Revert to +0x0 if ESP was working before.**
 
 ---
 
@@ -163,26 +172,17 @@ make -j$(nproc)
 ./sourcesight  # Run from terminal to see logs
 ```
 
-## File Structure (Key Files Modified)
+## Key Files
 
 ```
-src/core/engine/classes/SkinChanger.cpp     — Rewritten with read-back, item_addr fix
-src/core/engine/classes/SkinChanger.hpp     — Added ForceUpdate()
-src/core/engine/classes/SkinDatabase.hpp    — Per-weapon skin presets (SkinsByWeapon)
-src/core/engine/classes/MapRaytrace.cpp     — NEW: KD-tree raytrace against .tri files
-src/core/engine/classes/MapRaytrace.hpp     — NEW: Map raytrace interface
-src/core/engine/classes/Game.cpp            — Entity list retry + re-scan
-src/core/engine/cache/Cache.cpp             — Diagnostic logging + map reload
-src/core/engine/Engine.cpp                  — MapRaytrace::Init()
-src/core/offsets/Dumper.cpp                 — RescanEntityList() with alt patterns
-src/core/offsets/Dumper.hpp                 — RescanEntityList() declaration
-src/core/offsets/Offsets.hpp                — Skin changer offsets
-src/core/input/MouseAim.cpp                — Toggle fix + map raytrace vis check
-src/gui/frontend/esp/Esp.cpp               — Diagnostic logging
-src/gui/frontend/menu/Menu.cpp             — Grid-based skin browser UI
-src/config/Config.cpp                      — Skin preset save/load
-src/config/Current.hpp                     — Config defaults
-scripts/install-omarchy.sh                 — Hyprland fullscreen fix
-tools/extract_maps.py                      — NEW: Python map extractor
-tools/extract_maps.sh                      — NEW: Bash map extractor
+src/core/offsets/Offsets.hpp          — All offsets
+src/core/engine/classes/SkinChanger.cpp — Skin application logic
+src/core/engine/classes/SkinDatabase.hpp — Paint kit IDs per weapon
+src/core/engine/classes/Player.cpp    — Player entity resolution
+src/core/engine/classes/MapRaytrace.cpp — KD-tree raytrace
+src/core/input/MouseAim.cpp          — Aimbot with visibility check
+src/core/input/Triggerbot.cpp        — Triggerbot
+src/gui/frontend/menu/Menu.cpp       — Glassmorphism menu
+src/gui/frontend/esp/Esp.cpp         — ESP rendering
+src/gui/frontend/overlays/Overlays.cpp — Bomb timer, border, radar
 ```
