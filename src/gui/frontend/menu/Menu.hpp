@@ -61,6 +61,6 @@ private:
 
     ImVec2 pos;
     ImVec2 size;
-    
+
     ImFont* font_icons;
 };
