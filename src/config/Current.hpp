@@ -175,6 +175,18 @@ namespace cfg {
 		inline float fov_radius = 350.0f;
 	}
 
+	// Triggerbot: auto-fire when crosshair is on an enemy.
+	namespace triggerbot {
+		inline bool enabled = false;
+		inline bool hotkey = true;          // Hold key to activate
+		inline bool visible_only = true;    // Only fire at visible enemies
+		inline int delay_ms = 0;            // Delay before firing (0 = instant)
+		inline int burst_count = 1;         // Shots per trigger (1 = semi-auto)
+		inline int burst_delay_ms = 80;     // Delay between burst shots
+		inline bool pistols_only = false;   // Only trigger with pistols
+		inline bool rifles_only = false;    // Only trigger with rifles
+	}
+
 	// Bypass / anti-detection.
 	namespace bypass {
 		inline bool timing_jitter = true;     // Randomise write timing

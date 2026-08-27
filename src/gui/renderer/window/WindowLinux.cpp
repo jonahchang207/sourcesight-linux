@@ -53,6 +53,13 @@ void FeedModifiers(ImGuiIO& io, Display* display, const char keys[32]) {
                                 || IsKeysymDown(keys, display, XK_Meta_L) || IsKeysymDown(keys, display, XK_Meta_R));
 }
 
+// Intercept GLFW scroll callback: only feed to ImGui when the menu is open.
+// Otherwise the scroll wheel passes through to CS2 (commonly bound to jump).
+void ScrollCallbackRedirect(GLFWwindow* window, double xoffset, double yoffset) {
+    if (Window::capture_menu)
+        ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
+}
+
 void PollGlobalKeyboard() {
     Display* display = glfwGetX11Display();
     if (!display)
@@ -227,6 +234,9 @@ bool Window::CreateImGui() {
         ImGui::DestroyContext();
         return false;
     }
+    // Replace the default scroll callback so scroll events only reach ImGui
+    // when the menu is open.  Otherwise they pass through to CS2.
+    glfwSetScrollCallback(hwnd, ScrollCallbackRedirect);
     if (!ImGui_ImplOpenGL3_Init("#version 330")) {
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();

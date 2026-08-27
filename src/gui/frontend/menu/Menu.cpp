@@ -224,7 +224,7 @@ void Menu::RenderImpl() {
                 ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
                 ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10, 7));
 
-                for (int i = 0; i < 6; ++i) {
+                for (int i = 0; i < 7; ++i) {
                     const auto& tab = tabs[i];
                     bool is_active = (active_tab == tab.id);
 
@@ -576,6 +576,68 @@ void Menu::RenderImpl() {
 
                     ImGui::Spacing();
                     ImGui::TextWrapped("F9: panic key (disables all). MB5: toggle aim.");
+                }
+                else if (active_tab == Tab::TRIGGERBOT)
+                {
+                    ImGui::TextColored(kSapphire, "Triggerbot");
+                    ImGui::Separator();
+
+                    // Enable / Disable toggle
+                    if (!cfg::triggerbot::enabled) {
+                        if (SapphireButton("Enable Triggerbot"))
+                            cfg::triggerbot::enabled = true;
+                    } else {
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.38f, 0.12f, 0.16f, 0.90f));
+                        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.48f, 0.16f, 0.20f, 0.95f));
+                        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.32f, 0.10f, 0.14f, 0.95f));
+                        if (ImGui::Button("Disable Triggerbot", ImVec2(-1, 30)))
+                            cfg::triggerbot::enabled = false;
+                        ImGui::PopStyleColor(3);
+                    }
+
+                    ImGui::Spacing();
+                    ImGui::Checkbox("Hold key to fire", &cfg::triggerbot::hotkey);
+                    ImGui::SetItemTooltip("Hold Left Alt to activate triggerbot");
+
+                    ImGui::Spacing();
+                    ImGui::BeginDisabled(!cfg::triggerbot::enabled);
+                    {
+                        ImGui::Checkbox("Visible only", &cfg::triggerbot::visible_only);
+                        ImGui::SetItemTooltip("Only fire at enemies you can see");
+
+                        ImGui::Spacing();
+
+                        if (BeginGlassSection("Target")) {
+                            static const char* target_parts[] = { "Head", "Body", "Legs", "Neck / Mid-body" };
+                            int tp = cfg::aim::target_part;
+                            if (ImGui::Combo("Target", &tp, target_parts, 4))
+                                cfg::aim::target_part = tp;
+                            EndGlassSection(true);
+                        }
+
+                        if (BeginGlassSection("Fire Settings")) {
+                            ImGui::SliderInt("Fire delay (ms)", &cfg::triggerbot::delay_ms, 0, 200);
+                            ImGui::SetItemTooltip("Delay before firing (0 = instant)");
+                            ImGui::SliderInt("Burst count", &cfg::triggerbot::burst_count, 1, 10);
+                            ImGui::SetItemTooltip("Shots per trigger activation");
+                            ImGui::SliderInt("Burst delay (ms)", &cfg::triggerbot::burst_delay_ms, 20, 300);
+                            ImGui::SetItemTooltip("Delay between burst shots");
+                            EndGlassSection(true);
+                        }
+
+                        if (BeginGlassSection("Weapon Filter")) {
+                            ImGui::Checkbox("Pistols only", &cfg::triggerbot::pistols_only);
+                            ImGui::Checkbox("Rifles only", &cfg::triggerbot::rifles_only);
+                            if (cfg::triggerbot::pistols_only && cfg::triggerbot::rifles_only) {
+                                cfg::triggerbot::rifles_only = false;
+                            }
+                            EndGlassSection(true);
+                        }
+                    }
+                    ImGui::EndDisabled();
+
+                    ImGui::Spacing();
+                    ImGui::TextWrapped("Hold Left Alt to fire when crosshair is on an enemy.");
                 }
                 else if (active_tab == Tab::SKINS)
                 {

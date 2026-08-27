@@ -206,6 +206,19 @@ bool Config::ReadImpl() {
 			cfg::bypass::noise_amplitude = bp.value("noise_amplitude", 0.3f);
 		}
 
+		// triggerbot
+		if (data.contains("triggerbot")) {
+			const auto& tb = data["triggerbot"];
+			cfg::triggerbot::enabled = tb.value("enabled", false);
+			cfg::triggerbot::hotkey = tb.value("hotkey", true);
+			cfg::triggerbot::visible_only = tb.value("visible_only", true);
+			cfg::triggerbot::delay_ms = tb.value("delay_ms", 0);
+			cfg::triggerbot::burst_count = tb.value("burst_count", 1);
+			cfg::triggerbot::burst_delay_ms = tb.value("burst_delay_ms", 80);
+			cfg::triggerbot::pistols_only = tb.value("pistols_only", false);
+			cfg::triggerbot::rifles_only = tb.value("rifles_only", false);
+		}
+
 		// audio
 		if (data.contains("audio")) {
 			cfg::audio::lock_sound = data["audio"].value("lock_sound", false);
@@ -395,6 +408,16 @@ bool Config::WriteImpl() {
 	data["bypass"]["write_delay_min_us"] = cfg::bypass::write_delay_min_us;
 	data["bypass"]["write_delay_max_us"] = cfg::bypass::write_delay_max_us;
 	data["bypass"]["noise_amplitude"] = cfg::bypass::noise_amplitude;
+
+	// triggerbot
+	data["triggerbot"]["enabled"] = cfg::triggerbot::enabled;
+	data["triggerbot"]["hotkey"] = cfg::triggerbot::hotkey;
+	data["triggerbot"]["visible_only"] = cfg::triggerbot::visible_only;
+	data["triggerbot"]["delay_ms"] = cfg::triggerbot::delay_ms;
+	data["triggerbot"]["burst_count"] = cfg::triggerbot::burst_count;
+	data["triggerbot"]["burst_delay_ms"] = cfg::triggerbot::burst_delay_ms;
+	data["triggerbot"]["pistols_only"] = cfg::triggerbot::pistols_only;
+	data["triggerbot"]["rifles_only"] = cfg::triggerbot::rifles_only;
 
 	// audio
 	data["audio"]["lock_sound"] = cfg::audio::lock_sound;

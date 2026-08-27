@@ -6,6 +6,7 @@
 #include "core/engine/classes/SkinChanger.hpp"
 #include "core/engine/classes/MapRaytrace.hpp"
 #include "core/input/MouseAim.hpp"
+#include "core/input/Triggerbot.hpp"
 
 bool Engine::Init() {
     return GetInstance().InitImpl();
@@ -43,6 +44,7 @@ bool Engine::InitImpl() {
 		LOGF(WARNING, "Failed to parse config, using default values");
 
 	MapRaytrace::Init();
+	Triggerbot::Init();
 
 #ifdef _DEBUG
     if (!cfg::dev::console)
@@ -62,6 +64,7 @@ void Engine::Thread() {
 		Macro::Update();
 		MouseAim::Update();
 		SkinChanger::Run();
+		Triggerbot::Update();
 
 		if (cfg::settings::free_cpu)
             std::this_thread::sleep_until(start + 1ms);
