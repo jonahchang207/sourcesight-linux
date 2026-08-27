@@ -34,6 +34,7 @@ private:
     void RenderImpl();
 
     void RenderBomb();
+    void RenderBombBorder();
     void RenderRadar();
     void RenderNotice();
     void RenderWatermark();

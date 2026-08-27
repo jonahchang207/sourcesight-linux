@@ -604,13 +604,31 @@ void Esp::RenderBombBox(Bomb bomb) {
 		this->font_merged_icons,
 		16.0f,
 		Vec2_t(
-			screen.x - 8, // lazy
+			screen.x - 8,
 			screen.y
 		),
 		ImColor(255, 255, 255),
 		WeaponIcons::C4
 	);
 	ImGui::PopFont();
+
+	// Bomb timer text
+	if (cfg::world::bomb::timer) {
+		float time_left = std::max(0.0f, bomb.time_left);
+		int seconds = static_cast<int>(time_left);
+		int tenths = static_cast<int>((time_left - seconds) * 10.0f);
+		char buf[16];
+		std::snprintf(buf, sizeof(buf), "%d.%ds", seconds, tenths);
+
+		// Color shifts from white to red as time runs out
+		float urgency = 1.0f - (time_left / 40.0f);
+		int r = 220 + (int)(urgency * 35);
+		int g = 220 - (int)(urgency * 180);
+		int b = 220 - (int)(urgency * 180);
+
+		Vec2_t timer_pos(screen.x + 4, screen.y);
+		d->AddText(this->font, 14.0f, timer_pos, IM_COL32(r, g, b, 255), buf);
+	}
 }
 
 void Esp::RenderCrosshair(Player local)

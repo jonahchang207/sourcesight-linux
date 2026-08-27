@@ -68,6 +68,7 @@ void Overlays::RenderImpl() {
         RenderSpeedChart();
         RenderRadar();
         RenderBomb();
+        RenderBombBorder();
     }
     ImGui::PopFont();
 }
@@ -628,9 +629,6 @@ void Overlays::RenderBomb() {
     if (!bomb.is_planted && !is_menu_open)
         return;
 
-    if (bomb.is_planted && !bomb.pos.length() && !is_menu_open)
-        return;
-
     if (!local.alive && !is_menu_open)
         return;
 
@@ -707,4 +705,64 @@ void Overlays::RenderBomb() {
             d->AddLine(bar_start, bar_filled_end, bar_color, bar_height);
         }
     }
+}
+
+// ── Pulsing red border around screen edges when bomb is planted ────────
+// Flashes in sync with the bomb timer for situational awareness.
+void Overlays::RenderBombBorder() {
+    auto snapshot = Cache::CopySnapshot();
+    auto& bomb = snapshot.bomb;
+
+    if (!bomb.is_planted)
+        return;
+
+    auto& io = ImGui::GetIO();
+    auto d = ImGui::GetBackgroundDrawList();
+    auto screen = io.DisplaySize;
+
+    // Pulse rate accelerates as bomb timer runs down
+    const float time_left = std::max(0.0f, bomb.time_left);
+    const float urgency = 1.0f - (time_left / 40.0f); // 0 = just planted, 1 = about to explode
+
+    // Faster pulse as explosion approaches: 1 Hz -> 4 Hz
+    const float pulse_hz = 1.0f + urgency * 3.0f;
+    const float t = static_cast<float>(ImGui::GetTime()) * pulse_hz * 6.28318f; // 2*pi
+    const float pulse = (std::sin(t) + 1.0f) * 0.5f; // 0..1
+
+    // Alpha: always visible but pulses harder near explosion
+    const float base_alpha = 0.15f + urgency * 0.25f;
+    const float alpha = base_alpha + pulse * (0.20f + urgency * 0.40f);
+
+    // Red intensifies as time runs out
+    const int r = 220 + (int)(urgency * 35); // 220 -> 255
+    const int g = (int)(30 * (1.0f - urgency)); // 30 -> 0
+    const int b = 20;
+    const int a = (int)(alpha * 255.0f);
+
+    const float border = 3.0f + pulse * 2.0f; // 3-5px border
+
+    // Top edge
+    d->AddRectFilled(ImVec2(0, 0), ImVec2(screen.x, border), IM_COL32(r, g, b, a));
+    // Bottom edge
+    d->AddRectFilled(ImVec2(0, screen.y - border), ImVec2(screen.x, screen.y), IM_COL32(r, g, b, a));
+    // Left edge
+    d->AddRectFilled(ImVec2(0, 0), ImVec2(border, screen.y), IM_COL32(r, g, b, a));
+    // Right edge
+    d->AddRectFilled(ImVec2(screen.x - border, 0), ImVec2(screen.x, screen.y), IM_COL32(r, g, b, a));
+
+    // Corner glow accents (brighter at corners)
+    const float corner_size = 20.0f + pulse * 15.0f;
+    const int corner_a = (int)(alpha * 355.0f); // brighter than edges
+    // Top-left
+    d->AddRectFilled(ImVec2(0, 0), ImVec2(corner_size, border + 1), IM_COL32(r, g, b, std::min(corner_a, 255)));
+    d->AddRectFilled(ImVec2(0, 0), ImVec2(border + 1, corner_size), IM_COL32(r, g, b, std::min(corner_a, 255)));
+    // Top-right
+    d->AddRectFilled(ImVec2(screen.x - corner_size, 0), ImVec2(screen.x, border + 1), IM_COL32(r, g, b, std::min(corner_a, 255)));
+    d->AddRectFilled(ImVec2(screen.x - border - 1, 0), ImVec2(screen.x, corner_size), IM_COL32(r, g, b, std::min(corner_a, 255)));
+    // Bottom-left
+    d->AddRectFilled(ImVec2(0, screen.y - border - 1), ImVec2(corner_size, screen.y), IM_COL32(r, g, b, std::min(corner_a, 255)));
+    d->AddRectFilled(ImVec2(0, screen.y - corner_size), ImVec2(border + 1, screen.y), IM_COL32(r, g, b, std::min(corner_a, 255)));
+    // Bottom-right
+    d->AddRectFilled(ImVec2(screen.x - corner_size, screen.y - border - 1), ImVec2(screen.x, screen.y), IM_COL32(r, g, b, std::min(corner_a, 255)));
+    d->AddRectFilled(ImVec2(screen.x - border - 1, screen.y - corner_size), ImVec2(screen.x, screen.y), IM_COL32(r, g, b, std::min(corner_a, 255)));
 }
