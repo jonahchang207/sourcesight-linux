@@ -176,11 +176,9 @@ bool Config::ReadImpl() {
 		if (data.contains("aim")) {
 			const auto& aim = data["aim"];
 			cfg::aim::enabled = aim.value("enabled", false);
-			cfg::aim::game_mode = aim.value("game_mode", false);
+			cfg::aim::game_mode = aim.value("game_mode", true);
 			cfg::aim::aim_at_enemies = aim.value("aim_at_enemies", true);
-			cfg::aim::deadzone = aim.value("deadzone", 3.0f);
-			cfg::aim::max_delta = aim.value("max_delta", 500.0f);
-			cfg::aim::speed = aim.value("speed", 800.0f);			cfg::aim::hotkey = aim.value("hotkey", true);
+			cfg::aim::hotkey = aim.value("hotkey", true);
 			cfg::aim::visible_only = aim.value("visible_only", false);
 			cfg::aim::auto_start = aim.value("auto_start", false);
 			cfg::aim::target_part = aim.value("target_part", 3);
