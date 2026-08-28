@@ -288,6 +288,26 @@ bool MouseAim::TargetInfo(float& x, float& y, bool& visible) {
     return true;
 }
 
+bool MouseAim::Locked() {
+    std::lock_guard<std::mutex> lock(mtx_);
+    return has_target_;
+}
+
+bool MouseAim::OnTarget(float radius) {
+    std::lock_guard<std::mutex> lock(mtx_);
+    if (!has_target_)
+        return false;
+    float ref_x = screen_w_ * 0.5f;
+    float ref_y = screen_h_ * 0.5f;
+    if (!cfg::aim::game_mode && cursor_tracked_) {
+        ref_x = cursor_x_;
+        ref_y = cursor_y_;
+    }
+    const float dx = target_x_ - ref_x;
+    const float dy = target_y_ - ref_y;
+    return dx * dx + dy * dy <= radius * radius;
+}
+
 void MouseAim::Init() {
     const auto size = MonitorSize();
     screen_w_ = size.first;

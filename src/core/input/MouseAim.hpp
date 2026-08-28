@@ -45,6 +45,14 @@ public:
     // of sight. Returns false when the aim has no target right now.
     static bool TargetInfo(float& x, float& y, bool& visible);
 
+    // True while a target is locked on.
+    static bool Locked();
+
+    // True while a target is locked AND the aim has reached it (the aim point
+    // is within `radius` px of the crosshair / cursor reference). Used by the
+    // linked aim+trigger burst.
+    static bool OnTarget(float radius = 10.0f);
+
 private:
     MouseAim() = default;
 

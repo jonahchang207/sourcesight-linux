@@ -1,6 +1,7 @@
 #include "Renderer.hpp"
 #include "window/Window.hpp"
 
+#include "config/Current.hpp"
 #include "core/engine/Engine.hpp"
 #include "gui/frontend/esp/Esp.hpp"
 #include "gui/frontend/menu/Menu.hpp"
@@ -9,6 +10,52 @@
 #include <X11/keysym.h>
 #include <filesystem>
 #include <unistd.h>
+#include <algorithm>
+#endif
+
+#ifndef _WIN32
+// Union of the menu rect and every movable / resizable overlay widget rect,
+// clamped to the display. Returns x, y, w, h (w/h zero when nothing should
+// be captured); each rect is inflated by `pad` so mid-drag drift keeps the
+// pointer inside the XShape input region.
+static void ComputeCaptureUnion(float out[4]) {
+    auto& io = ImGui::GetIO();
+    const float W = io.DisplaySize.x;
+    const float H = io.DisplaySize.y;
+
+    float L = W, T = H, R = 0.f, B = 0.f;
+    const auto include = [&](float x, float y, float w, float h, float pad) {
+        if (w <= 0.f || h <= 0.f)
+            return;
+        L = std::min(L, x - pad);
+        T = std::min(T, y - pad);
+        R = std::max(R, x + w + pad);
+        B = std::max(B, y + h + pad);
+    };
+
+    const auto menu_pos = Menu::GetPos();
+    const auto menu_size = Menu::GetSize();
+    include(menu_pos.x, menu_pos.y, menu_size.x, menu_size.y, 4.f);
+
+    // Movable / resizable widgets; sized generously since the actual window
+    // decorations also live inside these rects.
+    include(cfg::world::radar::pos.x, cfg::world::radar::pos.y,
+            cfg::world::radar::size.x, cfg::world::radar::size.y, 40.f);
+    include(cfg::world::velocity::pos.x, cfg::world::velocity::pos.y,
+            cfg::world::velocity::size.x, cfg::world::velocity::size.y, 40.f);
+    include(cfg::world::bomb::pos.x, cfg::world::bomb::pos.y, 200.f, 56.f, 40.f);
+    include(cfg::world::spectators::pos.x, cfg::world::spectators::pos.y, 260.f, 160.f, 40.f);
+
+    L = std::clamp(L, 0.f, W);
+    R = std::clamp(R, 0.f, W);
+    T = std::clamp(T, 0.f, H);
+    B = std::clamp(B, 0.f, H);
+
+    out[0] = L;
+    out[1] = T;
+    out[2] = (R > L) ? R - L : 0.f;
+    out[3] = (B > T) ? B - T : 0.f;
+}
 #endif
 
 bool Renderer::Init() {
@@ -110,8 +157,16 @@ void Renderer::Render() {
     if (isOpen) {
         Menu::Render();
 #ifndef _WIN32
-        // Keep the menu clickable; everything outside it stays click-through.
-        Window::SetMenuCapture(true, Menu::GetPos().x, Menu::GetPos().y, Menu::GetSize().x, Menu::GetSize().y);
+        // While the menu is open, input must be captured not just over the
+        // menu but also over the movable / resizable overlay widgets (radar,
+        // bomb timer, spectator list, velocity graph). The XShape input
+        // region below is the ONLY interactive area of the always
+        // click-through overlay, so without these rects the widgets can
+        // never be grabbed, dragged or resized. Each is inflated so a drag
+        // that drifts past its edge without releasing stays captured.
+        float cap[4];
+        ComputeCaptureUnion(cap);
+        Window::SetMenuCapture(true, cap[0], cap[1], cap[2], cap[3]);
 #endif
     } else {
 #ifndef _WIN32

@@ -65,6 +65,7 @@ void Engine::Thread() {
 		MouseAim::Update();
 		SkinChanger::Run();
 		Triggerbot::Update();
+		Triggerbot::UpdateAimLink();
 
 		if (cfg::settings::free_cpu)
             std::this_thread::sleep_until(start + 1ms);

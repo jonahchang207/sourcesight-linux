@@ -353,6 +353,7 @@ bool Config::ReadImpl(const std::string& path) {
 			cfg::aim::fov_radius = aim.value("fov_radius", 350.0f);
 			cfg::aim::exit_fov_mult = aim.value("exit_fov_mult", 1.6f);
 			cfg::aim::toggle_key = aim.value("toggle_key", 292);
+			cfg::aim::lock_burst = aim.value("lock_burst", false);
 		}
 
 		// bypass
@@ -565,6 +566,7 @@ bool Config::WriteImpl(const std::string& path) {
 	data["aim"]["lead_time"] = cfg::aim::lead_time;
 	data["aim"]["exit_fov_mult"] = cfg::aim::exit_fov_mult;
 	data["aim"]["toggle_key"] = cfg::aim::toggle_key;
+	data["aim"]["lock_burst"] = cfg::aim::lock_burst;
 
 	// bypass
 	data["bypass"]["timing_jitter"] = cfg::bypass::timing_jitter;

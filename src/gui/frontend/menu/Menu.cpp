@@ -667,6 +667,16 @@ void Menu::RenderImpl() {
                     ImGui::Spacing();
                     ImGui::Checkbox("MB5 hotkey toggle", &cfg::aim::hotkey);
 
+                    if (BeginGlassSection("On Lock", cfg::aim::enabled)) {
+                        ImGui::Checkbox("Release A/D + burst on target", &cfg::aim::lock_burst);
+                        ImGui::SetItemTooltip(
+                            "Links the aim and trigger: once the locked target is reached the "
+                            "strafe keys (A/D) are released and bursts are fired using the "
+                            "Triggerbot burst settings until the target is lost. The manual "
+                            "crosshair trigger is disabled while this is on.");
+                        EndGlassSection(true, cfg::aim::enabled);
+                    }
+
                     ImGui::Spacing();
                     {
                         ImGui::Checkbox("Game mode (CS2)", &cfg::aim::game_mode);

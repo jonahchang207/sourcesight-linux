@@ -4,6 +4,7 @@
 #include "config/Current.hpp"
 #include "core/engine/cache/Cache.hpp"
 #include "core/engine/Engine.hpp"
+#include "core/input/MouseAim.hpp"
 #include "gui/renderer/Renderer.hpp"
 
 #include <X11/Xlib.h>
@@ -18,9 +19,27 @@ namespace {
 
 Display* g_display = nullptr;
 
+// How close (px) the aim point must be to the crosshair for the locked-on
+// burst to arm, and how long it re-arms after a burst cycle.
+constexpr float kLockRadius = 10.0f;
+
 void InitDisplay() {
     if (!g_display)
         g_display = XOpenDisplay(nullptr);
+}
+
+// Send key releases for the strafe keys (A/D) via XTest so the shot is
+// taken while standing still. Running this every tick is harmless; XTest
+// just reports the (already up) key as up.
+void ReleaseStrafe() {
+    if (!g_display) return;
+    static const KeySym strafe_syms[] = { XK_a, XK_d };
+    for (KeySym sym : strafe_syms) {
+        const KeyCode code = XKeysymToKeycode(g_display, sym);
+        if (code)
+            XTestFakeKeyEvent(g_display, code, False, CurrentTime);
+    }
+    XFlush(g_display);
 }
 
 // XTest left-click: press and release with a small delay.
@@ -92,6 +111,11 @@ void Triggerbot::UpdateImpl() {
     if (!cfg::enabled || !cfg::triggerbot::enabled)
         return;
 
+    // Linked aim+trigger owns the firing while it is enabled, so the manual
+    // crosshair check is skipped to avoid double shots.
+    if (cfg::aim::enabled && cfg::aim::lock_burst)
+        return;
+
     if (Renderer::IsOpen())
         return;
 
@@ -137,15 +161,7 @@ void Triggerbot::UpdateImpl() {
     if (!IsCrosshairOnEnemy())
         return;
 
-    // Fire with optional delay and burst
-    if (cfg::triggerbot::delay_ms > 0)
-        std::this_thread::sleep_for(std::chrono::milliseconds(cfg::triggerbot::delay_ms));
-
-    for (int i = 0; i < cfg::triggerbot::burst_count; ++i) {
-        if (i > 0 && cfg::triggerbot::burst_delay_ms > 0)
-            std::this_thread::sleep_for(std::chrono::milliseconds(cfg::triggerbot::burst_delay_ms));
-        XTestClick(g_display);
-    }
+    Burst();
 }
 
 bool Triggerbot::IsCrosshairOnEnemy() {
@@ -186,4 +202,58 @@ void Triggerbot::Fire() {
     InitDisplay();
     if (g_display)
         XTestClick(g_display);
+}
+
+void Triggerbot::Burst() {
+    InitDisplay();
+    if (!g_display)
+        return;
+
+    if (cfg::triggerbot::delay_ms > 0)
+        std::this_thread::sleep_for(std::chrono::milliseconds(cfg::triggerbot::delay_ms));
+
+    for (int i = 0; i < cfg::triggerbot::burst_count; ++i) {
+        if (i > 0 && cfg::triggerbot::burst_delay_ms > 0)
+            std::this_thread::sleep_for(std::chrono::milliseconds(cfg::triggerbot::burst_delay_ms));
+        XTestClick(g_display);
+    }
+}
+
+void Triggerbot::UpdateAimLink() {
+    if (!cfg::enabled || !cfg::aim::enabled || !cfg::aim::lock_burst)
+        return;
+
+    if (Renderer::IsOpen())
+        return;
+
+    InitDisplay();
+    if (!g_display)
+        return;
+
+    auto& cache = Cache::Get();
+    const auto& local = cache.local;
+    if (!local.alive)
+        return;
+
+    // Only act once the aim has actually landed on the locked target.
+    if (!MouseAim::Locked() || !MouseAim::OnTarget(kLockRadius))
+        return;
+
+    // Stop A/D strafing so the burst is taken from a standstill.
+    ReleaseStrafe();
+
+    // Sustain bursts while tracking: re-arm once one full cycle has elapsed.
+    static double last_burst = 0.0;
+    using namespace std::chrono;
+    static const auto epoch = steady_clock::now();
+    const double now = duration<double>(steady_clock::now() - epoch).count();
+    double cooldown =
+        cfg::triggerbot::delay_ms +
+        cfg::triggerbot::burst_count * cfg::triggerbot::burst_delay_ms + 180.0;
+    cooldown = std::clamp(cooldown, 100.0, 800.0);
+    if (now - last_burst < cooldown)
+        return;
+    last_burst = now;
+
+    Burst();
 }

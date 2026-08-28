@@ -183,6 +183,11 @@ namespace cfg {
 		inline float lead_time = 0.25f;         // Seconds of enemy velocity extrapolation (tracking)
 		inline float fov_radius = 350.0f;       // Acquisition radius (px around crosshair)
 		inline float exit_fov_mult = 1.6f;      // Release happens only beyond fov*this (hysteresis)
+
+		// Linked aim+trigger: once the locked target has been reached, release
+		// the strafe keys (A/D) and fire bursts using the triggerbot burst
+		// settings, until the target is lost.
+		inline bool lock_burst = false;
 	}
 
 	// Triggerbot: auto-fire when crosshair is on an enemy.

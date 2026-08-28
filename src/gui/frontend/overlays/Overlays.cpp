@@ -566,7 +566,7 @@ void Overlays::RenderBomb() {
     float bar_height = 3.f;
     float element_gap = 6.f;
 
-    auto duration_str = std::format("{}s", bomb.is_planted ? bomb.time_left : 40.0f);
+    auto duration_str = std::format("{}s", bomb.is_planted ? std::max(0.f, bomb.time_left) : 40.0f);
     auto bombsite_str = std::string(!bomb.is_planted || bomb.site == BombSite::A ? "A" : "B");
 
     std::string bomb_string = "";
@@ -614,7 +614,9 @@ void Overlays::RenderBomb() {
     if (!bomb.is_planted && !is_menu_open)
         return;
 
-    if (!local.alive && !is_menu_open)
+    // A planted bomb stays visible even in the death cam; the timer is most
+    // important there.
+    if (!local.alive && !bomb.is_planted && !is_menu_open)
         return;
 
     Vec2_t screen_pos;
@@ -709,10 +711,12 @@ void Overlays::RenderBombBorder() {
     const float time_left = std::max(0.0f, bomb.time_left);
     const float urgency = 1.0f - (time_left / 40.0f); // 0 = just planted, 1 = about to explode
 
-    // Faster pulse as explosion approaches: 1 Hz -> 4 Hz
-    const float pulse_hz = 1.0f + urgency * 3.0f;
-    const float t = static_cast<float>(ImGui::GetTime()) * pulse_hz * 6.28318f; // 2*pi
-    const float pulse = (std::sin(t) + 1.0f) * 0.5f; // 0..1
+    // Flash once per whole bomb second, aligned to the same tick the in-game
+    // beep sounds. time_left is wall-clock derived, so a free-running sine
+    // would drift out of phase with it; instead the flash decays across each
+    // second, guaranteeing the screen pulses exactly in time with the bomb.
+    const float frac = time_left - std::floor(time_left);
+    const float pulse = std::max(0.0f, 1.0f - frac); // 1 right after each tick, decays to 0
 
     // Alpha: always visible but pulses harder near explosion
     const float base_alpha = 0.15f + urgency * 0.25f;
