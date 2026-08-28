@@ -1,24 +1,39 @@
-name: Omarchy Linux build
+name: Linux build
 
 on:
   push:
-    branches: [main, omarchy-port]
+    branches: [main]
   pull_request:
+
+concurrency:
+  group: linux-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
     container: archlinux:base-devel
+    timeout-minutes: 30
+
     steps:
-      - name: Install build tools
-        run: pacman -Syu --noconfirm git cmake curl glfw-x11 libx11 libxrandr mesa ttf-dejavu
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm git cmake curl glfw-x11 libx11 libxrandr libxtst mesa ttf-dejavu
+
       - uses: actions/checkout@v6
         with:
           submodules: recursive
+
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
       - name: Build
-        run: cmake --build build --parallel 2
+        run: cmake --build build --parallel "$(nproc)"
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:

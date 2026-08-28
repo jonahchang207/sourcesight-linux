@@ -9,3 +9,10 @@ extend-exclude = [
 [default.extend-words]
 # CS2 resource identifiers use "variante" to mean "variant e".
 variante = "variante"
+# CS2 weapon / skin naming: "Five-SeveN" and "StatTrak". These are correct
+# product spellings, not typos.
+seve = "seve"
+fiveseven = "fiveseven"
+trak = "trak"
+stattrak = "stattrak"
+m_nfallbackstattrak = "m_nfallbackstattrak"

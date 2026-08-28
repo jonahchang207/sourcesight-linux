@@ -1,4 +1,4 @@
-name: Build artifacts
+name: Package Linux release
 
 on:
   workflow_dispatch:
@@ -7,42 +7,32 @@ permissions:
   contents: read
 
 jobs:
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-      - uses: microsoft/setup-msbuild@v3
-      - name: Build
-        run: msbuild sourcesight.sln /p:Configuration=Release /p:Platform=x64
-      - name: Package
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Path package
-          Copy-Item -Path x64/Release/* -Destination package -Recurse
-          Copy-Item README.md,LICENSE -Destination package
-          Compress-Archive -Path package/* -DestinationPath sourcesight-windows-x64.zip
-      - uses: actions/upload-artifact@v7
-        with:
-          name: sourcesight-windows-release
-          path: sourcesight-windows-x64.zip
-          if-no-files-found: error
   linux:
     runs-on: ubuntu-latest
     container: archlinux:base-devel
+    timeout-minutes: 30
+
     steps:
-      - name: Install build tools
-        run: pacman -Syu --noconfirm git cmake curl glfw-x11 libx11 libxrandr mesa ttf-dejavu
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm git cmake curl glfw-x11 libx11 libxrandr libxtst mesa ttf-dejavu
+
       - uses: actions/checkout@v6
         with:
           submodules: recursive
+
       - name: Build
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --parallel 2
+          cmake --build build --parallel "$(nproc)"
+
       - name: Package
-        run: tar -czf sourcesight-linux-x64.tar.gz -C build sourcesight -C .. README.md LICENSE scripts/install-omarchy.sh
+        run: >-
+          tar -czf sourcesight-linux-x64.tar.gz
+          -C build sourcesight
+          -C .. README.md LICENSE scripts/install-omarchy.sh
+
       - uses: actions/upload-artifact@v7
         with:
           name: sourcesight-linux-release

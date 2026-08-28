@@ -1,8 +1,11 @@
 name: Typo check
 on:
   push:
-    branches: [main, omarchy-port]
+    branches: [main]
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   run:
