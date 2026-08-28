@@ -7,6 +7,7 @@
 #include "core/engine/classes/MapRaytrace.hpp"
 #include "core/input/MouseAim.hpp"
 #include "core/input/Triggerbot.hpp"
+#include "core/input/Spinbot.hpp"
 
 bool Engine::Init() {
     return GetInstance().InitImpl();
@@ -45,6 +46,7 @@ bool Engine::InitImpl() {
 
 	MapRaytrace::Init();
 	Triggerbot::Init();
+	Spinbot::Init();
 
 #ifdef _DEBUG
     if (!cfg::dev::console)
@@ -63,6 +65,7 @@ void Engine::Thread() {
         Cache::Refresh();
 		Macro::Update();
 		MouseAim::Update();
+		Spinbot::Update();
 		SkinChanger::Run();
 		Triggerbot::Update();
 		Triggerbot::UpdateAimLink();

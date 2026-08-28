@@ -186,6 +186,10 @@ void Triggerbot::UpdateImpl() {
     Burst();
 }
 
+bool Triggerbot::OnEnemy() {
+    return IsCrosshairOnEnemy();
+}
+
 bool Triggerbot::IsCrosshairOnEnemy() {
     auto& cache = Cache::Get();
     const auto& local = cache.local;
@@ -220,10 +224,13 @@ bool Triggerbot::IsCrosshairOnEnemy() {
     return false;
 }
 
-void Triggerbot::Fire() {
+bool Triggerbot::Fire() {
     InitDisplay();
-    if (g_display)
+    if (g_display) {
         XTestClick(g_display);
+        return true;
+    }
+    return false;
 }
 
 void Triggerbot::Burst() {

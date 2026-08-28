@@ -731,6 +731,21 @@ void Menu::RenderImpl() {
                             ImGui::SetItemTooltip("Extrapolate the aim ahead of a moving target by this many seconds of its screen velocity.");
                             EndGlassSection(true, cfg::aim::enabled);
                         }
+
+                        if (BeginGlassSection("Spinbot", cfg::spinbot::enabled)) {
+                            ImGui::Checkbox("Spin continuously", &cfg::spinbot::enabled);
+                            ImGui::SetItemTooltip("Spins your view (and the player model with it) through the kernel mouse driver — no memory writes. The model rotates so incoming shots fan out across a moving hitbox. Pauses while the menu is open and uses the F9 panic key. Disable Aim while spinning so the two don't fight.");
+                            ImGui::Checkbox("Shoot while spinning", &cfg::spinbot::shoot);
+                            ImGui::SetItemTooltip("Automatically fire exactly one clean shot the instant the crosshair sweeps onto an enemy, using your Triggerbot's visibility/target/threshold rules — a shot per pass, no sprayed rounds.");
+                            int dir_i = cfg::spinbot::direction > 0 ? 0 : 1;
+                            if (ImGui::Combo("Direction", &dir_i, "Clockwise\0Counter-clockwise\0"))
+                                cfg::spinbot::direction = dir_i == 0 ? 1 : -1;
+                            ImGui::SliderFloat("Spin speed", &cfg::spinbot::speed, 200.0f, 6000.0f, "%.0f px/s");
+                            ImGui::SliderFloat("Pitch sway", &cfg::spinbot::pitch_sway, 0.0f, 120.0f, "%.0f px");
+                            ImGui::SetItemTooltip("Vertical swing added to the spin (0 = flat yaw circle).");
+                            ImGui::SliderFloat("Sway rate", &cfg::spinbot::sway_hz, 0.5f, 6.0f, "%.1f Hz");
+                            EndGlassSection(true, cfg::spinbot::enabled);
+                        }
                     }
 
                     ImGui::Spacing();

@@ -536,6 +536,7 @@ void MouseAim::Update() {
     if (cfg::settings::panic_key_pressed) {
         cfg::settings::panic_key_pressed = false;
         cfg::aim::enabled = false;
+        cfg::spinbot::enabled = false;
         cfg::esp::spotted_only = false;
         cfg::esp::headshot_line = false;
         LOGF(WARNING, "[panic] all cheats disabled (F9)");

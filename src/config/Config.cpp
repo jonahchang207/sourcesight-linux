@@ -358,6 +358,17 @@ bool Config::ReadImpl(const std::string& path) {
 			cfg::aim::lock_burst = aim.value("lock_burst", false);
 		}
 
+// spinbot
+		if (data.contains("spinbot")) {
+			const auto& sb = data["spinbot"];
+			cfg::spinbot::enabled = sb.value("enabled", false);
+			cfg::spinbot::shoot = sb.value("shoot", true);
+			cfg::spinbot::direction = sb.value("direction", 1);
+			cfg::spinbot::speed = sb.value("speed", 1600.0f);
+			cfg::spinbot::pitch_sway = sb.value("pitch_sway", 0.0f);
+			cfg::spinbot::sway_hz = sb.value("sway_hz", 2.5f);
+		}
+
 		// bypass
 		if (data.contains("bypass")) {
 			const auto& bp = data["bypass"];
@@ -592,6 +603,14 @@ bool Config::WriteImpl(const std::string& path) {
 	data["triggerbot"]["dwell_ms"] = cfg::triggerbot::dwell_ms;
 	data["triggerbot"]["pistols_only"] = cfg::triggerbot::pistols_only;
 	data["triggerbot"]["rifles_only"] = cfg::triggerbot::rifles_only;
+
+	// spinbot
+	data["spinbot"]["enabled"] = cfg::spinbot::enabled;
+	data["spinbot"]["shoot"] = cfg::spinbot::shoot;
+	data["spinbot"]["direction"] = cfg::spinbot::direction;
+	data["spinbot"]["speed"] = cfg::spinbot::speed;
+	data["spinbot"]["pitch_sway"] = cfg::spinbot::pitch_sway;
+	data["spinbot"]["sway_hz"] = cfg::spinbot::sway_hz;
 
 	// audio
 	data["audio"]["lock_sound"] = cfg::audio::lock_sound;

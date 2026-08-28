@@ -199,6 +199,18 @@ namespace cfg {
 		inline bool lock_burst = false;
 	}
 
+	// Continuous camera spin driven purely through the kernel mouse driver
+	// (no game-memory writes). Rotating the view carries the player model
+	// with it, so incoming shots fan out across a moving hitbox.
+	namespace spinbot {
+		inline bool enabled = false;
+		inline bool shoot = true;          // Auto-fire once per enemy the crosshair sweeps over
+		inline int direction = 1;          // +1 = clockwise (yaw right), -1 = counter-clockwise
+		inline float speed = 1600.0f;      // px/s of horizontal mouse movement while spinning
+		inline float pitch_sway = 0.0f;    // px of vertical sway per spin (0 = pure yaw)
+		inline float sway_hz = 2.5f;       // sway oscillation rate
+	}
+
 	// Triggerbot: auto-fire when crosshair is on an enemy.
 	namespace triggerbot {
 		inline bool enabled = false;

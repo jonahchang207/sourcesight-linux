@@ -37,5 +37,5 @@ target_include_directories(sourcesight PRIVATE src src/external src/external/img
     src/external/json/include
     src/external/AsyncLogger/src src/external/AsyncLogger/include/AsyncLogger)
 target_precompile_headers(sourcesight PRIVATE src/common.hpp)
-target_link_libraries(sourcesight PRIVATE CURL::libcurl OpenGL::GL glfw X11::X11 X11::Xext X11::Xtst pthread)
+target_link_libraries(sourcesight PRIVATE CURL::libcurl OpenGL::GL glfw X11::X11 X11::Xext X11::Xtst X11::Xi pthread)
 install(TARGETS sourcesight RUNTIME DESTINATION bin)
