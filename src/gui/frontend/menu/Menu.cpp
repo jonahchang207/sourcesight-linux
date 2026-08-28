@@ -37,8 +37,12 @@ ImVec4 LerpColor(const ImVec4& a, const ImVec4& b, float t) {
 }
 
 // Advance an animated scalar toward its target and return the eased value.
+// Frame-rate-independent exponential smoothing; safe for any positive speed.
+// (The old form computed pow(1 - speed, dt*60) with speed > 1, i.e. a
+// negative base, which yielded NaN and silently killed every animation.)
 float AnimateScalar(float& current, float target, float speed, float dt) {
-    current = Lerp(current, target, 1.0f - std::pow(1.0f - speed, dt * 60.0f));
+    const float t = 1.0f - std::exp(-speed * dt);
+    current = Lerp(current, target, t);
     return current;
 }
 
