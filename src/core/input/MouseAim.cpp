@@ -505,6 +505,39 @@ void MouseAim::Update() {
         ref_y = cursor_y_;
     }
 
+    // ── lock tracking ───────────────────────────────────────────────
+    // Re-project the locked enemy from memory every tick. Without this the
+    // aim point froze at the acquisition instant, so the controller chased
+    // where the target *was* and only "tracked" by re-acquiring once the
+    // enemy had drifted far enough to trip ValidateTarget. Tracking also
+    // keeps the lead_time velocity history fed with real positions instead
+    // of a frozen sample. Scanner (explicit) targets are excluded.
+    auto& cache = Cache::Get();
+    if (auto_target_ && locked_player_index_ >= 0) {
+        bool found = false;
+        for (auto& p : cache.players) {
+            if (p.index != locked_player_index_)
+                continue;
+            found = true;
+            if (!p.alive || p.localplayer || p.team == cache.local.team) {
+                ClearTargetUnlocked();
+                return;
+            }
+            Vec2_t screen;
+            if (!PlayerAimScreen(p, cache.game.view_matrix, screen_w_, screen_h_, screen)) {
+                ClearTargetUnlocked();
+                return;
+            }
+            target_x_ = screen.x;
+            target_y_ = screen.y;
+            break;
+        }
+        if (!found) {
+            ClearTargetUnlocked();
+            return;
+        }
+    }
+
     // ── lead_time: extrapolate the aim point along the target's screen ──
     // ── velocity. The target history is sampled here each tick so the      ──
     // ── estimated velocity (px/s) survives FOV gates below.              ──
@@ -528,10 +561,9 @@ void MouseAim::Update() {
         prev_target_time_ = now;
     }
 
-    const float err_x = aim_x - ref_x;
-    const float err_y = aim_y - ref_y;
-
     // ── FOV gate: only pursue targets inside the ring around the cursor ──
+    // Gate on the *tracked* target position (not the lead-extrapolated aim
+    // point) so a large lead can't push the aim outside the release ring.
     // Acquisition uses the configured fov_radius; once a target is locked, a
     // wider ring (fov * exit_fov_mult) is used to release it, so a moving
     // target that strays just past the edge of the ring doesn't dump the lock
@@ -540,24 +572,12 @@ void MouseAim::Update() {
     const float fov = std::max(1.0f, cfg::aim::fov_radius);
     const float lock_dist =
         has_target_ ? fov * std::max(1.0f, cfg::aim::exit_fov_mult) : fov;
-    if (err_x * err_x + err_y * err_y > lock_dist * lock_dist) {
+    const float gdx = target_x_ - ref_x;
+    const float gdy = target_y_ - ref_y;
+    if (gdx * gdx + gdy * gdy > lock_dist * lock_dist) {
         ClearTargetUnlocked();
         return;
     }
-
-    // A stale auto-locked target (enemy died / left the screen) must release
-    // the lock so SelectNearestEnemy can re-evaluate next tick. Only targets
-    // picked by the auto selection are validated; scanner targets are trusted.
-    if (cfg::aim::aim_at_enemies && auto_target_ && has_target_) {
-        const int locked_index = ValidateTarget();
-        if (locked_index < 0) {
-            ClearTargetUnlocked();
-            return;
-        }
-        locked_player_index_ = locked_index;
-    }
-
-    auto& cache = Cache::Get();
 
     // ── vision check: map raytrace + player occlusion ───────────────
     // Uses the parsed map collision mesh to cast a ray from our eye to
