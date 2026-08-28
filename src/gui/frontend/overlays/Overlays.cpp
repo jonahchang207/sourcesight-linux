@@ -3,6 +3,7 @@
 #include "updater/Updater.hpp"
 #include "gui/renderer/Renderer.hpp" // Circular dependency
 #include "gui/frontend/menu/Menu.hpp" // Circular dependency
+#include "gui/frontend/menu/Theme.hpp"
 #include "assets/fonts/WeaponIcons.h"
 
 bool Overlays::Init() {
@@ -98,19 +99,8 @@ void Overlays::RenderWatermark() {
     auto rect_end = ImVec2(io.DisplaySize.x - margin, margin + size.y + padding);
     auto pos = ImVec2(rect_start.x + padding, rect_start.y + padding * 0.6/* compensate font */);
 
-    d->AddRectFilled(
-        rect_start,
-        rect_end,
-        IM_COL32(0, 0, 0, 200),
-        8.f
-    );
-
-    d->AddRect(
-        rect_start,
-        rect_end,
-        IM_COL32(100, 100, 100, 200),
-        8.f
-    );
+    theme::DrawGlass(d, rect_start, ImVec2(rect_end.x - rect_start.x, rect_end.y - rect_start.y),
+                     8.0f, theme::kSurfaceElev1, 0.85f);
 
     d->AddText(
         pos,
@@ -144,23 +134,12 @@ void Overlays::RenderNotice() {
     auto rect_end = ImVec2(menu_pos.x + menu_size.x, menu_pos.y - margin);
     auto pos = ImVec2(rect_start.x + padding, rect_start.y + padding);
 
-    d->AddRectFilled(
-        rect_start,
-        rect_end,
-        IM_COL32(0, 0, 0, 200),
-        10.f
-    );
-
-    d->AddRect(
-        rect_start,
-        rect_end,
-        IM_COL32(100, 100, 100, 200),
-        10.f
-    );
+    theme::DrawGlass(d, rect_start, ImVec2(rect_end.x - rect_start.x, rect_end.y - rect_start.y),
+                     10.0f, theme::kSurfaceElev1, 0.92f);
 
     d->AddText(
         pos - ImVec2(0, padding + padding * 0.5),
-        IM_COL32(255, 200, 0, 255),
+        theme::Pack(theme::kGold),
         "Notice"
     );
 
@@ -492,24 +471,12 @@ void Overlays::RenderRadar() {
     const float ry = size.y * 0.5f;
     const float radius = std::min(rx, ry);
 
-    d->AddRectFilled(
-        ImVec2(pos.x, pos.y),
-        ImVec2(pos.x + size.x, pos.y + size.y),
-        IM_COL32(0, 0, 0, 50),
-        6.f
-    );
+    theme::DrawGlass(d, pos, size, 6.f, theme::kSurfaceDeep, 0.92f);
 
-    d->AddRect(
-        ImVec2(pos.x, pos.y),
-        ImVec2(pos.x + size.x, pos.y + size.y),
-        IM_COL32(80, 80, 80, 100),
-        6.f
-    );
-
-    d->AddCircle(ImVec2(cx, cy), radius * 0.333f, IM_COL32(50, 50, 50, 120));
-    d->AddCircle(ImVec2(cx, cy), radius * 0.666f, IM_COL32(50, 50, 50, 120));
-    d->AddLine(ImVec2(pos.x + 4.f, cy), ImVec2(pos.x + size.x - 4.f, cy), IM_COL32(50, 50, 50, 120));
-    d->AddLine(ImVec2(cx, pos.y + 4.f), ImVec2(cx, pos.y + size.y - 4.f), IM_COL32(50, 50, 50, 120));
+    d->AddCircle(ImVec2(cx, cy), radius * 0.333f, theme::Pack(theme::WithAlpha(theme::kBorderBase, 0.55f)));
+    d->AddCircle(ImVec2(cx, cy), radius * 0.666f, theme::Pack(theme::WithAlpha(theme::kBorderBase, 0.55f)));
+    d->AddLine(ImVec2(pos.x + 4.f, cy), ImVec2(pos.x + size.x - 4.f, cy), theme::Pack(theme::WithAlpha(theme::kBorderBase, 0.55f)));
+    d->AddLine(ImVec2(cx, pos.y + 4.f), ImVec2(cx, pos.y + size.y - 4.f), theme::Pack(theme::WithAlpha(theme::kBorderBase, 0.55f)));
 
     for (auto& player : players) {
         if (!player.alive)

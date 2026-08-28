@@ -8,10 +8,13 @@
 #include "gui/renderer/window/Window.hpp"
 #include "assets/fonts/Icons.h"
 #include "assets/fonts/WeaponIcons.h"
+#include "Theme.hpp"
 
 #include <cmath>
 #include <algorithm>
 #include <unordered_map>
+#include <string>
+#include <filesystem>
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Animation Utilities
@@ -19,102 +22,162 @@
 
 namespace {
 
-float Lerp(float a, float b, float t) {
-    return a + (b - a) * t;
-}
+
+float Clamp01(float x) { return x < 0.0f ? 0.0f : (x > 1.0f ? 1.0f : x); }
+
+// Ease-out cubic: fast start, soft landing. Used for all transitions so the
+// UI never feels linear/jerky. `t` must be 0..1.
+float EaseOutCubic(float t) { return 1.0f - std::pow(1.0f - Clamp01(t), 3.0f); }
+
+float Lerp(float a, float b, float t) { return a + (b - a) * t; }
 
 ImVec4 LerpColor(const ImVec4& a, const ImVec4& b, float t) {
     return ImVec4(Lerp(a.x, b.x, t), Lerp(a.y, b.y, t),
                   Lerp(a.z, b.z, t), Lerp(a.w, b.w, t));
 }
 
-// ── Sapphire Glassmorphism Palette ────────────────────────────────────────
-constexpr ImVec4 kGlassBg         = ImVec4(0.04f, 0.05f, 0.08f, 0.88f);
-constexpr ImVec4 kGlassBgLight    = ImVec4(0.06f, 0.07f, 0.11f, 0.82f);
-constexpr ImVec4 kGlassBgDeep     = ImVec4(0.03f, 0.04f, 0.06f, 0.92f);
-constexpr ImVec4 kGlassBorder     = ImVec4(0.12f, 0.18f, 0.30f, 0.50f);
-constexpr ImVec4 kGlassGlow       = ImVec4(0.20f, 0.40f, 0.70f, 0.15f);
-constexpr ImVec4 kSapphire        = ImVec4(0.26f, 0.56f, 0.92f, 1.00f);
-constexpr ImVec4 kSapphireBright  = ImVec4(0.32f, 0.62f, 0.96f, 1.00f);
-constexpr ImVec4 kSapphireMuted   = ImVec4(0.10f, 0.18f, 0.30f, 0.90f);
-constexpr ImVec4 kTextPrimary     = ImVec4(0.92f, 0.94f, 0.98f, 1.00f);
-constexpr ImVec4 kTextSecondary   = ImVec4(0.56f, 0.62f, 0.72f, 1.00f);
-constexpr ImVec4 kTextMuted       = ImVec4(0.36f, 0.40f, 0.48f, 1.00f);
-constexpr ImVec4 kAccentGreen     = ImVec4(0.30f, 0.78f, 0.56f, 1.00f);
-constexpr ImVec4 kAccentRed       = ImVec4(0.92f, 0.34f, 0.34f, 1.00f);
-
-// ── Glassmorphism Drawing Helpers ─────────────────────────────────────────
-
-void DrawGlassCard(ImDrawList* dl, const ImVec2& pos, const ImVec2& size,
-                   const ImVec4& tint = kGlassBg, float rounding = 10.0f) {
-    dl->AddRectFilled(
-        ImVec2(pos.x - 1, pos.y - 1), ImVec2(pos.x + size.x + 1, pos.y + size.y + 1),
-        IM_COL32(kGlassGlow.x * 255, kGlassGlow.y * 255, kGlassGlow.z * 255, 35), rounding + 1);
-    dl->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y),
-        IM_COL32(tint.x * 255, tint.y * 255, tint.z * 255, tint.w * 255), rounding);
-    dl->AddRectFilled(
-        ImVec2(pos.x + 2, pos.y + 1), ImVec2(pos.x + size.x - 2, pos.y + 3),
-        IM_COL32(kSapphire.x * 255, kSapphire.y * 255, kSapphire.z * 255, 25), rounding);
-    dl->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y),
-        IM_COL32(kGlassBorder.x * 255, kGlassBorder.y * 255, kGlassBorder.z * 255, kGlassBorder.w * 255),
-        rounding, 0, 1.0f);
+// Advance an animated scalar toward its target and return the eased value.
+float AnimateScalar(float& current, float target, float speed, float dt) {
+    current = Lerp(current, target, 1.0f - std::pow(1.0f - speed, dt * 60.0f));
+    return current;
 }
 
-// ── Collapsible Section State ─────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────
+// The palette and glass/aurora drawing helpers live in Theme.hpp (single
+// source of truth for the "Sapphire Glass" design language). This TU opts
+// into those tokens so every existing reference keeps working.
+// ───────────────────────────────────────────────────────────────────────────
+using namespace theme;
 
-struct SectionState { bool open = true; };
+// ── Collapsible Section State (animated) ──────────────────────────────────
+
+struct SectionState {
+    bool open = true;      // logical state
+    float reveal = 1.0f;   // 0..1 animated open/close progress (ease-out)
+    float hover = 0.0f;    // header hover glow
+};
 static std::unordered_map<ImGuiID, SectionState> g_section_states;
 
 bool BeginGlassSection(const char* label) {
+    auto& io = ImGui::GetIO();
     ImGuiID id = ImGui::GetID(label);
     auto& state = g_section_states[id];
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 5));
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.06f, 0.10f, 0.18f, 0.70f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.08f, 0.14f, 0.24f, 0.80f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.10f, 0.18f, 0.30f, 0.85f));
-    ImGui::PushStyleColor(ImGuiCol_Text, kSapphire);
+    // Pull smoothly toward the target state every frame.
+    const float target = state.open ? 1.0f : 0.0f;
+    AnimateScalar(state.reveal, target, 5.0f, io.DeltaTime);
+    if (state.open && state.reveal > 0.999f)
+        state.reveal = 1.0f;
+    if (!state.open && state.reveal < 0.001f)
+        state.reveal = 0.0f;
 
-    std::string arrow = state.open ? "> " : "> ";
-    if (ImGui::Button((arrow + label).c_str(), ImVec2(-1, 22)))
+    const float ease = EaseOutCubic(state.reveal);
+    const bool drawing = ease > 0.001f;
+
+    // ── Header row ───────────────────────────────────────────────────
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 4));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 9.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12, 8));
+
+    // Frosted strip that draws toward sapphire as it is hovered. `state.hover`
+    // is eased every frame, so the tint animates with the cursor.
+    ImVec4 hdr_bg = LerpColor(kSurfaceElev1, kAccentDim, state.hover * 0.30f);
+    hdr_bg.w = 0.82f;
+    ImGui::PushStyleColor(ImGuiCol_Button, hdr_bg);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, LerpColor(kSurfaceElev1, kAccentDim, 0.45f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, kAccentDim);
+    ImGui::PushStyleColor(ImGuiCol_Text, state.open ? kTextPrimary : kTextSecondary);
+
+    // Pad the label so the caret (drawn at ~x=11) never overlaps the text.
+    if (ImGui::Button((std::string("    ") + label).c_str(), ImVec2(-1, 38))) {
         state.open = !state.open;
+        // Reverse direction for the collapse so it feels responsive.
+        state.reveal = state.open ? std::max(state.reveal, 0.12f)
+                                  : std::min(state.reveal, 0.88f);
+    }
+
+    const bool hovered = ImGui::IsItemHovered();
+    AnimateScalar(state.hover, hovered ? 1.0f : 0.0f, 8.0f, io.DeltaTime);
+
+    // Draw the animated caret + accent bar over the header.
+    if (drawing) {
+        const ImVec2 hmin = ImGui::GetItemRectMin();
+        const ImVec2 hmax = ImGui::GetItemRectMax();
+        const float cx = hmin.x + 11.0f;
+        const float cy = (hmin.y + hmax.y) * 0.5f;
+        const float r = 3.2f;
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+
+        // Chevron rotation: down (open, 0°) ↔ right (closed, 90°), eased.
+        const float rot = (state.open ? ease : 1.0f - ease) * (3.14159265f / 2.0f);
+        const float cr = std::cos(rot), sr = std::sin(rot);
+        // Points of a "›" chevron scaled by rotation.
+        ImVec2 p1(-r, -r), p2(0, 0), p3(-r, r);
+        auto rotp = [&](ImVec2 p) {
+            return ImVec2(cx + p.x * cr - p.y * sr, cy + p.x * sr + p.y * cr);
+        };
+        ImU32 col = IM_COL32(kAccent.x * 255, kAccent.y * 255, kAccent.z * 255, (int)(210 * ease));
+        const ImVec2 chevron_points[] = { rotp(p1), rotp(p2), rotp(p3) };
+        dl->AddPolyline(chevron_points, 3, col, 0, 1.8f);
+
+        // Accent active-bar on the header left edge.
+        if (state.open) {
+            dl->AddRectFilled(ImVec2(hmin.x + 1, hmin.y + 4),
+                              ImVec2(hmin.x + 3, hmax.y - 4),
+                              IM_COL32(kAccent.x * 255, kAccent.y * 255, kAccent.z * 255,
+                                       (int)(150 * ease)));
+        }
+        (void)sr;
+    }
 
     ImGui::PopStyleColor(4);
     ImGui::PopStyleVar(2);
 
-    if (state.open) {
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6.0f);
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.03f, 0.04f, 0.07f, 0.45f));
-        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.10f, 0.16f, 0.26f, 0.30f));
-        ImGui::BeginChild((std::string("##sec_") + label).c_str(), ImVec2(-1, 0), ImGuiChildFlags_Borders);
+    // ── Body (revealed area) ─────────────────────────────────────────
+    if (drawing) {
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, WithAlpha(kSurfaceElev2, 0.55f * ease));
+        ImGui::PushStyleColor(ImGuiCol_Border, WithAlpha(kBorderBase, 0.95f * ease));
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ease);
+        // Let the section body use its natural height. The parent content
+        // child owns scrolling, so expanded sections remain reachable instead
+        // of being clipped by a viewport-sized nested child.
+        ImGui::BeginChild((std::string("##sec_") + label).c_str(),
+                          ImVec2(-1, 0.0f),
+                          ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
+        ImGui::PopStyleVar(); // Pop Alpha after begin; keep the rest beneath it
     }
-    return state.open;
+    return drawing;
 }
 
 void EndGlassSection(bool is_open) {
     if (is_open) {
         ImGui::EndChild();
         ImGui::PopStyleColor(2);
-        ImGui::PopStyleVar();
+        ImGui::PopStyleVar(2); // ChildBorderSize + Child
     }
 }
 
 // ── Button Helpers ────────────────────────────────────────────────────────
 
+// Primary action button — sapphire CTA, clearly the main action.
 bool SapphireButton(const char* label, const ImVec2& size = ImVec2(-1, 30)) {
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.10f, 0.18f, 0.32f, 0.85f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.14f, 0.24f, 0.40f, 0.92f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.08f, 0.14f, 0.26f, 0.95f));
+    ImGui::PushStyleColor(ImGuiCol_Button, kAccentSoft);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, kAccent);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, kAccentStrong);
+    ImGui::PushStyleColor(ImGuiCol_Text, kTextPrimary);
     bool p = ImGui::Button(label, size);
-    ImGui::PopStyleColor(3);
+    ImGui::PopStyleColor(4);
     return p;
 }
 
+// Destructive / disable action — jewel-red, muted enough to signal danger
+// without shouting.
 bool DangerButton(const char* label, const ImVec2& size = ImVec2(-1, 26)) {
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.30f, 0.10f, 0.12f, 0.80f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.40f, 0.14f, 0.16f, 0.88f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.25f, 0.08f, 0.10f, 0.90f));
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.18f, 0.24f, 0.90f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.72f, 0.26f, 0.32f, 1.00f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.42f, 0.12f, 0.16f, 1.00f));
     bool p = ImGui::Button(label, size);
     ImGui::PopStyleColor(3);
     return p;
@@ -152,17 +215,20 @@ void Menu::RenderImpl() {
 #endif
 
     // ── Window ────────────────────────────────────────────────────────
-    ImGui::SetNextWindowSize(ImVec2(740, 540), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(760, 560), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSizeConstraints(ImVec2(660, 440), ImVec2(1000, 800));
     ImGui::SetNextWindowPos(ImVec2(screen.x * 0.5f, screen.y * 0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.03f, 0.04f, 0.07f, 0.90f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, kSurfaceDeep);
 
+    // Keep the top-level window free of scrollbars, but allow the content
+    // child to scroll. Collapsible sections can otherwise extend below the
+    // fixed-size window and their headers become unreachable.
     ImGuiWindowFlags wflags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar
-        | ImGuiWindowFlags_NoScrollWithMouse;
+        | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoTitleBar;
 
     if (ImGui::Begin(title, nullptr, wflags)) {
         this->pos = ImGui::GetWindowPos();
@@ -172,21 +238,58 @@ void Menu::RenderImpl() {
         ImVec2 wpos = ImGui::GetWindowPos();
         ImVec2 wsize = ImGui::GetWindowSize();
 
-        // Glassmorphism background
-        DrawGlassCard(dl, wpos, wsize, kGlassBgDeep, 12.0f);
+        // Sapphire aurora backdrop — deep navy canvas + soft radial glows
+        // that the translucent glass panels sit in front of.
+        DrawBackdrop(dl, wpos, wsize, 12.0f);
 
         // ── Title bar ─────────────────────────────────────────────────
-        const float title_h = 40.0f;
-        dl->AddRectFilled(wpos, ImVec2(wpos.x + wsize.x, wpos.y + title_h),
-            IM_COL32(10, 13, 22, 230), 12.0f);
-        dl->AddRectFilled(ImVec2(wpos.x, wpos.y + title_h - 1),
-            ImVec2(wpos.x + wsize.x, wpos.y + title_h),
-            IM_COL32(kSapphire.x * 255, kSapphire.y * 255, kSapphire.z * 255, 50));
+        const float title_h = 42.0f;
+        // Frosted strip over the aurora, plus a two-tone sapphire underline.
+        DrawGlass(dl, wpos, ImVec2(wsize.x, title_h), 12.0f, kSurfaceElev1, 0.55f, false);
+        const float sep_y = wpos.y + title_h;
+        dl->AddRectFilled(ImVec2(wpos.x, sep_y - 1), ImVec2(wpos.x + wsize.x, sep_y),
+                          Pack(WithAlpha(kAccent, 0.30f)));
+        dl->AddRectFilled(ImVec2(wpos.x, sep_y), ImVec2(wpos.x + wsize.x, sep_y + 1),
+                          Pack(WithAlpha(kBorderBase, 0.60f)));
 
-        ImGui::SetCursorScreenPos(ImVec2(wpos.x + 14, wpos.y + 11));
-        ImGui::TextColored(kSapphireBright, "%s", title);
-        ImGui::SameLine(wpos.x + wsize.x - 100);
-        ImGui::TextDisabled("v0.1.0");
+        // Brand gem (cut-sapphire mark).
+        const ImVec2 gem(wpos.x + 14, wpos.y + 11);
+        dl->AddRectFilled(gem, ImVec2(gem.x + 20, gem.y + 20), Pack(kAccent), 6.0f);
+        dl->AddRectFilled(ImVec2(gem.x + 2, gem.y + 2), ImVec2(gem.x + 8, gem.y + 7),
+                          Pack(WithAlpha(ImVec4(1, 1, 1, 0.9f), 0.90f)), 3.0f);
+        dl->AddLine(ImVec2(gem.x + 3, gem.y + 16), ImVec2(gem.x + 16, gem.y + 4),
+                    Pack(WithAlpha(ImVec4(1, 1, 1, 0.55f), 0.75f)), 1.0f);
+        dl->AddCircleFilled(ImVec2(gem.x + 14, gem.y + 14), 2.2f,
+                            Pack(WithAlpha(ImVec4(0.9f, 1, 1, 0.9f), 0.85f)));
+
+        ImGui::SetCursorScreenPos(ImVec2(wpos.x + 44, wpos.y + 9));
+        ImGui::TextColored(kTextPrimary, "%s", title);
+        ImGui::SetCursorScreenPos(ImVec2(wpos.x + 44, wpos.y + 24));
+        ImGui::TextColored(kTextMuted, "cheat overlay");
+
+        // Status + version glass chips on the right.
+        const char* status_txt = cfg::enabled ? "ACTIVE" : "PAUSED";
+        static float status_time = 0.0f;
+        status_time += io.DeltaTime;
+        const float pulse = 0.5f + 0.5f * std::sin(status_time * 6.2831853f);
+        const ImVec4 status_color = cfg::enabled ? kSignalOK : kSignalWarn;
+        const ImVec2 status_sz = ImGui::CalcTextSize(status_txt);
+        const float chip_h = 22.0f;
+        const float right = wpos.x + wsize.x - 14.0f;
+
+        const float vw = ImGui::CalcTextSize("v0.5.0").x + 16.0f;
+        const ImVec2 vmin(right - 6.0f - vw, wpos.y + 10);
+        DrawGlass(dl, vmin, ImVec2(vw, chip_h), 11.0f, kSurfaceElev2, 0.85f);
+        ImGui::SetCursorScreenPos(ImVec2(vmin.x + 8, wpos.y + 14));
+        ImGui::TextColored(kGold, "v0.5.0");
+
+        const float sw = status_sz.x + 30.0f;
+        const ImVec2 smin(right - 6.0f - vw - 8.0f - sw, wpos.y + 10);
+        DrawGlass(dl, smin, ImVec2(sw, chip_h), 11.0f, kSurfaceElev2, 0.85f);
+        dl->AddCircleFilled(ImVec2(smin.x + 10, smin.y + chip_h * 0.5f), 3.2f,
+            Pack(WithAlpha(status_color, cfg::enabled ? 0.55f + pulse * 0.45f : 0.85f)));
+        ImGui::SetCursorScreenPos(ImVec2(smin.x + 19, wpos.y + 14));
+        ImGui::TextColored(kTextSecondary, "%s", status_txt);
 
         ImGui::SetCursorScreenPos(ImVec2(wpos.x, wpos.y + title_h));
 
@@ -212,46 +315,64 @@ void Menu::RenderImpl() {
             auto avail = ImGui::GetContentRegionAvail();
 
             // ── Sidebar ───────────────────────────────────────────────
-            const float sidebar_w = 150.0f;
+            const float sidebar_w = 164.0f;
             ImGui::BeginChild("##sidebar", ImVec2(sidebar_w, avail.y), ImGuiChildFlags_None);
             {
                 auto sp = ImGui::GetCursorScreenPos();
                 auto ss = ImGui::GetContentRegionAvail();
-                DrawGlassCard(dl, sp, ss, kGlassBgLight, 8.0f);
+                DrawGlass(dl, sp, ss, 8.0f, kSurfaceElev1, 0.82f);
 
-                ImGui::SetCursorPos(ImVec2(6, 6));
-                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 2));
+                ImGui::SetCursorPos(ImVec2(10, 14));
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 5));
                 ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10, 7));
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(11, 8));
 
                 for (int i = 0; i < 7; ++i) {
                     const auto& tab = tabs[i];
-                    bool is_active = (active_tab == tab.id);
+                    const bool is_active = (active_tab == tab.id);
 
+                    // Active tab renders as a frosted sapphire pill; the rest
+                    // are quiet translucent glass tiles.
                     ImVec4 bg = is_active
-                        ? ImVec4(0.10f, 0.20f, 0.36f, 0.90f)
-                        : ImVec4(0.05f, 0.07f, 0.12f, 0.55f);
-                    ImVec4 hover = is_active
-                        ? ImVec4(0.14f, 0.26f, 0.44f, 0.95f)
-                        : ImVec4(0.07f, 0.10f, 0.18f, 0.65f);
-                    ImVec4 text = is_active ? kSapphireBright : kTextSecondary;
+                        ? LerpColor(kAccentDim, kAccentSoft, 0.35f)
+                        : LerpColor(kSurfaceDeep, kAccentDim, 0.14f);
+                    bg.w = is_active ? 0.92f : 0.48f;
+                    ImVec4 hover = LerpColor(kSurfaceElev1, kAccentDim, 0.45f);
+                    hover.w = 0.88f;
+                    ImVec4 text = is_active ? kTextPrimary : kTextSecondary;
 
                     ImGui::PushStyleColor(ImGuiCol_Button, bg);
                     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
-                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.08f, 0.14f, 0.26f, 0.95f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, kAccentDim);
                     ImGui::PushStyleColor(ImGuiCol_Text, text);
 
-                    if (ImGui::Button((tab.icon + " " + tab.label).c_str(), ImVec2(-1, 28)))
+                    if (ImGui::Button((tab.icon + "  " + tab.label).c_str(), ImVec2(-1, 34)))
                         active_tab = tab.id;
 
                     ImGui::PopStyleColor(4);
+
+                    if (is_active) {
+                        // Soft sapphire halo hugging the active pill.
+                        const ImVec2 amin = ImGui::GetItemRectMin();
+                        const ImVec2 amax = ImGui::GetItemRectMax();
+                        dl->AddRectFilled(amin - ImVec2(2, 2), amax + ImVec2(2, 2),
+                                          Pack(WithAlpha(kAccent, 0.10f)), 10.0f);
+                    }
                 }
 
                 ImGui::PopStyleVar(3);
 
+                // Sliding accent bar — the animated "you are here" marker.
+                static float active_indicator_y = 20.0f;
+                const float target_indicator_y = 14.0f + static_cast<float>(active_tab) * 39.0f + 17.0f;
+                AnimateScalar(active_indicator_y, target_indicator_y, 8.0f, io.DeltaTime);
+                dl->AddRectFilled(ImVec2(sp.x + 8, sp.y + active_indicator_y - 9),
+                                  ImVec2(sp.x + 11, sp.y + active_indicator_y + 10),
+                                  Pack(kAccentBright), 2.0f);
+
                 // Bottom section
                 auto space_left = ImGui::GetContentRegionAvail().y;
-                ImGui::SetCursorPosY(ImGui::GetCursorPos().y + std::max(0.0f, space_left - 72.0f));
+                ImGui::SetCursorPosY(ImGui::GetCursorPos().y + std::max(0.0f, space_left - 78.0f));
                 ImGui::SetCursorPosX(8);
                 ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
                 ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 4));
@@ -265,21 +386,26 @@ void Menu::RenderImpl() {
             ImGui::SameLine(0, 0);
 
             // ── Content area ──────────────────────────────────────────
-            ImGui::BeginChild("##content", ImVec2(0, avail.y), ImGuiChildFlags_None);
+            // The content area must own scrolling: opening a section increases
+            // its height, and the fixed-height parent cannot display all of it.
+            ImGui::BeginChild("##content", ImVec2(0, avail.y), ImGuiChildFlags_Borders,
+                              ImGuiWindowFlags_AlwaysVerticalScrollbar);
             {
                 auto cp = ImGui::GetCursorScreenPos();
                 auto cs = ImGui::GetContentRegionAvail();
-                DrawGlassCard(dl, cp, cs, kGlassBg, 8.0f);
+                DrawGlass(dl, cp, cs, 8.0f, kSurfaceElev2, 1.0f);
 
                 ImGui::SetCursorPos(ImVec2(10, 10));
                 ImGui::BeginDisabled(!cfg::enabled);
 
-                // Tab alpha for fade transition
-                ImGui::PushStyleVar(ImGuiStyleVar_Alpha, tab_alpha);
+                // Fade plus a small eased vertical slide for tab transitions.
+                const float transition = EaseOutCubic(tab_alpha);
+                ImGui::SetCursorPosY(10.0f + (1.0f - transition) * 6.0f);
+                ImGui::PushStyleVar(ImGuiStyleVar_Alpha, transition);
 
                 if (active_tab == Tab::PLAYER)
                 {
-                    ImGui::TextColored(kSapphire, "Player ESP");
+                    ImGui::TextColored(kAccent, "Player ESP");
                     ImGui::Separator();
 
                     if (BeginGlassSection("Visuals")) {
@@ -440,7 +566,7 @@ void Menu::RenderImpl() {
                 }
                 else if (active_tab == Tab::WORLD)
                 {
-                    ImGui::TextColored(kSapphire, "World");
+                    ImGui::TextColored(kAccent, "World");
                     ImGui::Separator();
 
                     if (BeginGlassSection("Bomb")) {
@@ -507,14 +633,14 @@ void Menu::RenderImpl() {
                 }
                 else if (active_tab == Tab::AIM)
                 {
-                    ImGui::TextColored(kSapphire, "Aim");
+                    ImGui::TextColored(kAccent, "Aim");
                     ImGui::Separator();
 
                     // Driver status
                     if (MouseAim::DriverInstalled())
-                        ImGui::TextColored(kAccentGreen, "Driver: ready");
+                        ImGui::TextColored(kSignalOK, "Driver: ready");
                     else
-                        ImGui::TextColored(kAccentRed, "Driver: MISSING");
+                        ImGui::TextColored(kSignalErr, "Driver: MISSING");
 
                     ImGui::Spacing();
 
@@ -523,12 +649,8 @@ void Menu::RenderImpl() {
                         if (SapphireButton("Enable Aim"))
                             cfg::aim::enabled = true;
                     } else {
-                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.38f, 0.12f, 0.16f, 0.90f));
-                        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.48f, 0.16f, 0.20f, 0.95f));
-                        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.32f, 0.10f, 0.14f, 0.95f));
-                        if (ImGui::Button("Disable Aim", ImVec2(-1, 30)))
+                        if (DangerButton("Disable Aim", ImVec2(-1, 30)))
                             cfg::aim::enabled = false;
-                        ImGui::PopStyleColor(3);
                     }
 
                     ImGui::Spacing();
@@ -569,17 +691,27 @@ void Menu::RenderImpl() {
                             MouseAim::ScreenSize(aim_w, aim_h);
                             const float fsr = std::sqrt(aim_w * aim_w + aim_h * aim_h) * 0.5f;
                             ImGui::SliderFloat("FOV radius", &cfg::aim::fov_radius, 0.0f, fsr, "%.0f px");
+                            ImGui::SliderFloat("Exit FOV multiplier", &cfg::aim::exit_fov_mult, 1.0f, 2.5f, "x%.2f");
+                            ImGui::SetItemTooltip("Targets are released only beyond FOV x this, so a moving target just past the ring edge keeps its lock (hysteresis).");
+                            EndGlassSection(true);
+                        }
+
+                        if (BeginGlassSection("Movement")) {
+                            ImGui::SliderFloat("Smoothness", &cfg::aim::smoothness, 0.02f, 1.0f, "%.2f");
+                            ImGui::SetItemTooltip("Proportional gain; lower = softer, less twitchy finish.");
+                            ImGui::SliderFloat("Lead time", &cfg::aim::lead_time, 0.0f, 0.5f, "%.3fs");
+                            ImGui::SetItemTooltip("Extrapolate the aim ahead of a moving target by this many seconds of its screen velocity.");
                             EndGlassSection(true);
                         }
                     }
                     ImGui::EndDisabled();
 
                     ImGui::Spacing();
-                    ImGui::TextWrapped("F9: panic key (disables all). MB5: toggle aim.");
+                    ImGui::TextWrapped("F9: panic key (disables all). MB5 or F10: toggle aim.");
                 }
                 else if (active_tab == Tab::TRIGGERBOT)
                 {
-                    ImGui::TextColored(kSapphire, "Triggerbot");
+                    ImGui::TextColored(kAccent, "Triggerbot");
                     ImGui::Separator();
 
                     // Enable / Disable toggle
@@ -587,12 +719,8 @@ void Menu::RenderImpl() {
                         if (SapphireButton("Enable Triggerbot"))
                             cfg::triggerbot::enabled = true;
                     } else {
-                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.38f, 0.12f, 0.16f, 0.90f));
-                        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.48f, 0.16f, 0.20f, 0.95f));
-                        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.32f, 0.10f, 0.14f, 0.95f));
-                        if (ImGui::Button("Disable Triggerbot", ImVec2(-1, 30)))
+                        if (DangerButton("Disable Triggerbot", ImVec2(-1, 30)))
                             cfg::triggerbot::enabled = false;
-                        ImGui::PopStyleColor(3);
                     }
 
                     ImGui::Spacing();
@@ -642,7 +770,7 @@ void Menu::RenderImpl() {
                 else if (active_tab == Tab::SKINS)
                 {
                     // ── Skin Changer: Grid Browser ─────────────────────
-                    ImGui::TextColored(kSapphire, "Skin Changer");
+                    ImGui::TextColored(kAccent, "Skin Changer");
                     ImGui::Separator();
 
                     static int selected_weapon = WEAPON_AK47;
@@ -660,7 +788,7 @@ void Menu::RenderImpl() {
                     for (int c = 0; c < 7; ++c) {
                         if (c > 0) ImGui::SameLine(0, 3);
                         bool active = (skin_category == c);
-                        if (active) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.10f, 0.20f, 0.36f, 0.90f));
+                        if (active) ImGui::PushStyleColor(ImGuiCol_Button, WithAlpha(kAccentDim, 0.92f));
                         if (ImGui::Button(categories[c])) skin_category = c;
                         if (active) ImGui::PopStyleColor();
                     }
@@ -745,12 +873,12 @@ void Menu::RenderImpl() {
                             bool has_skin = (skin_it != SkinChanger::GetAll().end() && skin_it->second.paint_kit > 0);
 
                             bool is_sel = (selected_weapon == w.id);
-                            ImVec4 bg = is_sel ? ImVec4(0.10f, 0.20f, 0.36f, 0.90f)
-                                : has_skin ? ImVec4(0.06f, 0.16f, 0.10f, 0.85f)
-                                : ImVec4(0.07f, 0.09f, 0.14f, 0.80f);
+                            ImVec4 bg = is_sel ? WithAlpha(kAccentDim, 0.95f)
+                                : has_skin ? WithAlpha(kSignalOK, 0.16f)
+                                : WithAlpha(kSurfaceElev1, 0.80f);
 
                             ImGui::PushStyleColor(ImGuiCol_Button, bg);
-                            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(bg.x + 0.03f, bg.y + 0.03f, bg.z + 0.05f, bg.w));
+                            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, LerpColor(bg, kAccentDim, 0.40f));
                             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
 
                             if (ImGui::Button(w.name, ImVec2(card_w, card_h))) {
@@ -777,7 +905,7 @@ void Menu::RenderImpl() {
                         const auto& winfo = SkinDB::Weapons().count(selected_weapon)
                             ? SkinDB::Weapons().at(selected_weapon)
                             : SkinDB::WeaponInfo{ "Unknown", 0 };
-                        ImGui::TextColored(kSapphire, "%s", winfo.display_name);
+                        ImGui::TextColored(kAccent, "%s", winfo.display_name);
                         ImGui::Separator();
                         ImGui::Spacing();
 
@@ -801,7 +929,7 @@ void Menu::RenderImpl() {
                         ImGui::Text("Wear");
                         ImGui::SliderFloat("##wear", &selected_wear, 0.0f, 1.0f, "%.3f");
                         ImGui::SameLine();
-                        ImGui::TextColored(ImVec4(0.7f, 0.8f, 0.9f, 1.0f), "%s", SkinDB::WearName(selected_wear));
+                        ImGui::TextColored(kAccentBright, "%s", SkinDB::WearName(selected_wear));
 
                         ImGui::Text("Seed");
                         ImGui::SliderInt("##seed", &selected_seed, 0, 1000);
@@ -835,13 +963,13 @@ void Menu::RenderImpl() {
 
                         const auto& active = SkinChanger::GetAll();
                         if (!active.empty()) {
-                            ImGui::TextColored(kAccentGreen, "Active (%d)", (int)active.size());
+                            ImGui::TextColored(kSignalOK, "Active (%d)", (int)active.size());
                             ImGui::Separator();
                             ImGui::BeginChild("##active_skins", ImVec2(0, 80));
                             for (const auto& [id, skin] : active) {
                                 const auto& wn = SkinDB::Weapons().count(id)
                                     ? SkinDB::Weapons().at(id).display_name : "?";
-                                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.5f, 1.0f), "%s", wn);
+                                ImGui::TextColored(kSignalOK, "%s", wn);
                                 ImGui::SameLine();
                                 ImGui::TextDisabled("kit %d  wear %.2f", skin.paint_kit, skin.wear);
                             }
@@ -852,7 +980,7 @@ void Menu::RenderImpl() {
                 }
                 else if (active_tab == Tab::MACRO)
                 {
-                    ImGui::TextColored(kSapphire, "Macro");
+                    ImGui::TextColored(kAccent, "Macro");
                     ImGui::Separator();
 
                     if (BeginGlassSection("AWP Quickswitch")) {
@@ -877,7 +1005,7 @@ void Menu::RenderImpl() {
                 }
                 else if (active_tab == Tab::SETTINGS)
                 {
-                    ImGui::TextColored(kSapphire, "Settings");
+                    ImGui::TextColored(kAccent, "Settings");
                     ImGui::Separator();
 
                     if (BeginGlassSection("Display")) {
@@ -961,65 +1089,65 @@ void Menu::RenderImpl() {
 void Menu::SetupStyles() {
     ImGuiStyle& style = ImGui::GetStyle();
 
-    // ── Glassmorphism Sapphire Theme ──────────────────────────────────
+    // ── Sapphire Glass theme (tokens from Theme.hpp) ───────────────────
     style.Colors[ImGuiCol_Text] = kTextPrimary;
     style.Colors[ImGuiCol_TextDisabled] = kTextMuted;
 
-    style.Colors[ImGuiCol_WindowBg] = kGlassBgDeep;
+    style.Colors[ImGuiCol_WindowBg] = kSurfaceDeep;
     style.Colors[ImGuiCol_ChildBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-    style.Colors[ImGuiCol_PopupBg] = ImVec4(0.06f, 0.07f, 0.11f, 0.96f);
+    style.Colors[ImGuiCol_PopupBg] = kSurfaceElev2;
 
-    style.Colors[ImGuiCol_Border] = kGlassBorder;
+    style.Colors[ImGuiCol_Border] = kBorderBase;
     style.Colors[ImGuiCol_BorderShadow] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 
-    style.Colors[ImGuiCol_FrameBg] = ImVec4(0.07f, 0.09f, 0.14f, 0.80f);
-    style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.10f, 0.14f, 0.22f, 0.88f);
-    style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.08f, 0.16f, 0.28f, 0.92f);
+    style.Colors[ImGuiCol_FrameBg] = kSurfaceBase;
+    style.Colors[ImGuiCol_FrameBgHovered] = kSurfaceElev1;
+    style.Colors[ImGuiCol_FrameBgActive] = kSurfaceElev2;
 
-    style.Colors[ImGuiCol_TitleBg] = ImVec4(0.03f, 0.04f, 0.06f, 1.00f);
-    style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.04f, 0.06f, 0.10f, 1.00f);
-    style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.03f, 0.03f, 0.05f, 0.60f);
+    style.Colors[ImGuiCol_TitleBg] = ImVec4(0.03f, 0.04f, 0.08f, 1.00f);
+    style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.06f, 0.10f, 0.18f, 1.00f);
+    style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.03f, 0.04f, 0.08f, 0.60f);
 
-    style.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.05f, 0.06f, 0.09f, 0.95f);
-    style.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.03f, 0.04f, 0.06f, 0.50f);
-    style.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.12f, 0.16f, 0.24f, 0.65f);
-    style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.16f, 0.22f, 0.32f, 0.75f);
-    style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.20f, 0.28f, 0.40f, 0.88f);
+    style.Colors[ImGuiCol_MenuBarBg] = kSurfaceElev1;
+    style.Colors[ImGuiCol_ScrollbarBg] = WithAlpha(kSurfaceDeep, 0.60f);
+    style.Colors[ImGuiCol_ScrollbarGrab] = kAccentDim;
+    style.Colors[ImGuiCol_ScrollbarGrabHovered] = LerpColor(kAccentDim, kAccent, 0.55f);
+    style.Colors[ImGuiCol_ScrollbarGrabActive] = kAccent;
 
-    style.Colors[ImGuiCol_Button] = ImVec4(0.08f, 0.12f, 0.20f, 0.80f);
-    style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.12f, 0.18f, 0.28f, 0.88f);
-    style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.10f, 0.22f, 0.38f, 0.95f);
+    style.Colors[ImGuiCol_Button] = kSurfaceElev1;
+    style.Colors[ImGuiCol_ButtonHovered] = kSurfaceElev2;
+    style.Colors[ImGuiCol_ButtonActive] = kAccentDim;
 
-    style.Colors[ImGuiCol_Header] = ImVec4(0.08f, 0.14f, 0.24f, 0.75f);
-    style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.12f, 0.20f, 0.32f, 0.85f);
-    style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.10f, 0.24f, 0.40f, 0.92f);
+    style.Colors[ImGuiCol_Header] = kSurfaceElev1;
+    style.Colors[ImGuiCol_HeaderHovered] = kSurfaceElev2;
+    style.Colors[ImGuiCol_HeaderActive] = kAccentDim;
 
-    style.Colors[ImGuiCol_CheckMark] = kSapphire;
-    style.Colors[ImGuiCol_SliderGrab] = kSapphire;
-    style.Colors[ImGuiCol_SliderGrabActive] = kSapphireBright;
+    style.Colors[ImGuiCol_CheckMark] = kAccent;
+    style.Colors[ImGuiCol_SliderGrab] = kAccent;
+    style.Colors[ImGuiCol_SliderGrabActive] = kAccentBright;
 
-    style.Colors[ImGuiCol_Separator] = ImVec4(0.10f, 0.16f, 0.26f, 0.45f);
-    style.Colors[ImGuiCol_SeparatorHovered] = ImVec4(0.18f, 0.28f, 0.44f, 0.55f);
-    style.Colors[ImGuiCol_SeparatorActive] = ImVec4(0.22f, 0.40f, 0.64f, 0.75f);
+    style.Colors[ImGuiCol_Separator] = kBorderBase;
+    style.Colors[ImGuiCol_SeparatorHovered] = kAccentGlow;
+    style.Colors[ImGuiCol_SeparatorActive] = kAccent;
 
     style.Colors[ImGuiCol_ResizeGrip] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-    style.Colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.20f, 0.40f, 0.65f, 0.30f);
-    style.Colors[ImGuiCol_ResizeGripActive] = ImVec4(0.20f, 0.40f, 0.65f, 0.60f);
+    style.Colors[ImGuiCol_ResizeGripHovered] = WithAlpha(kAccent, 0.35f);
+    style.Colors[ImGuiCol_ResizeGripActive] = WithAlpha(kAccentBright, 0.70f);
 
-    style.Colors[ImGuiCol_Tab] = ImVec4(0.05f, 0.06f, 0.10f, 0.80f);
-    style.Colors[ImGuiCol_TabHovered] = ImVec4(0.14f, 0.24f, 0.38f, 0.88f);
-    style.Colors[ImGuiCol_TabActive] = ImVec4(0.10f, 0.18f, 0.30f, 1.00f);
-    style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.04f, 0.05f, 0.08f, 0.75f);
-    style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.06f, 0.08f, 0.13f, 0.88f);
+    style.Colors[ImGuiCol_Tab] = WithAlpha(kSurfaceDeep, 0.85f);
+    style.Colors[ImGuiCol_TabHovered] = kSurfaceElev2;
+    style.Colors[ImGuiCol_TabActive] = kAccentDim;
+    style.Colors[ImGuiCol_TabUnfocused] = WithAlpha(kSurfaceDeep, 0.75f);
+    style.Colors[ImGuiCol_TabUnfocusedActive] = WithAlpha(kAccentDim, 0.80f);
 
     style.Colors[ImGuiCol_PlotLines] = ImVec4(0.30f, 0.40f, 0.56f, 1.00f);
     style.Colors[ImGuiCol_PlotLinesHovered] = ImVec4(0.92f, 0.40f, 0.36f, 1.00f);
-    style.Colors[ImGuiCol_PlotHistogram] = kSapphire;
-    style.Colors[ImGuiCol_PlotHistogramHovered] = kSapphireBright;
+    style.Colors[ImGuiCol_PlotHistogram] = kAccent;
+    style.Colors[ImGuiCol_PlotHistogramHovered] = kAccentBright;
 
     style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.20f, 0.36f, 0.58f, 0.40f);
-    style.Colors[ImGuiCol_DragDropTarget] = kSapphire;
-    style.Colors[ImGuiCol_NavHighlight] = kSapphire;
+    style.Colors[ImGuiCol_DragDropTarget] = kAccent;
+    style.Colors[ImGuiCol_NavHighlight] = kAccent;
     style.Colors[ImGuiCol_NavWindowingHighlight] = ImVec4(0.70f, 0.76f, 0.88f, 0.45f);
     style.Colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.04f, 0.06f, 0.10f, 0.55f);
     style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.04f, 0.06f, 0.10f, 0.65f);
@@ -1027,25 +1155,46 @@ void Menu::SetupStyles() {
     style.FrameBorderSize = 1.0f;
     style.ChildBorderSize = 1.0f;
     style.WindowPadding = ImVec2(0, 0);
-    style.FramePadding = ImVec2(10, 5);
-    style.ItemSpacing = ImVec2(8, 6);
-    style.ItemInnerSpacing = ImVec2(6, 4);
+    style.FramePadding = ImVec2(11, 6);
+    style.ItemSpacing = ImVec2(10, 8);
+    style.ItemInnerSpacing = ImVec2(8, 5);
     style.ScrollbarSize = 8.0f;
 
-    style.WindowRounding = 12.0f;
-    style.ChildRounding = 8.0f;
-    style.FrameRounding = 6.0f;
+    style.WindowRounding = 14.0f;
+    style.ChildRounding = 10.0f;
+    style.FrameRounding = 8.0f;
     style.PopupRounding = 8.0f;
     style.GrabRounding = 4.0f;
 
     auto& io = ImGui::GetIO();
     io.Fonts->Clear();
+
+    // Prefer JetBrainsMono Nerd Font when installed. Keep platform fallbacks
+    // so the UI remains usable on machines without the optional font package.
+    const char* font_paths[] = {
 #ifdef _WIN32
-    io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\arial.ttf", 15.0f);
+        "C:\\Windows\\Fonts\\JetBrainsMonoNerdFont-Regular.ttf",
+        "C:\\Windows\\Fonts\\JetBrainsMonoNerdFontMono-Regular.ttf",
+        "C:\\Windows\\Fonts\\arial.ttf",
 #else
-    if (!io.Fonts->AddFontFromFileTTF("/usr/share/fonts/TTF/DejaVuSans.ttf", 15.0f))
-        io.Fonts->AddFontDefault();
+        "/usr/share/fonts/truetype/jetbrains-mono-nl/JetBrainsMonoNerdFont-Regular.ttf",
+        "/usr/share/fonts/truetype/jetbrains-mono/JetBrainsMonoNerdFont-Regular.ttf",
+        "/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Regular.ttf",
+        "/usr/share/fonts/TTF/JetBrainsMonoNerdFontMono-Regular.ttf",
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",
 #endif
+    };
+
+    ImFont* ui_font = nullptr;
+    for (const char* path : font_paths) {
+        if (std::filesystem::exists(path)) {
+            ui_font = io.Fonts->AddFontFromFileTTF(path, 15.0f);
+            if (ui_font)
+                break;
+        }
+    }
+    if (!ui_font)
+        ui_font = io.Fonts->AddFontDefault();
 
     ImFontConfig merge_icon_cfg{};
     merge_icon_cfg.FontDataOwnedByAtlas = false;
@@ -1076,7 +1225,7 @@ void Menu::RenderStartupHelpImpl() {
 
     ImVec2 help_pos(screen.x / 2 - size.x / 2 - 20, 70);
     ImVec2 help_size(size.x + 40, size.y + 20);
-    DrawGlassCard(d, help_pos, help_size, ImVec4(0.04f, 0.05f, 0.08f, 0.90f), 8.0f);
+    DrawGlass(d, help_pos, help_size, 8.0f, kSurfaceDeep, 0.95f);
 
     d->AddText(
         ImVec2(screen.x / 2 - size.x / 2, 80),
