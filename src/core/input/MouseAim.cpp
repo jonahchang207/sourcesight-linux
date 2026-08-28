@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -20,6 +21,39 @@ namespace {
 
 constexpr double kResyncInterval = 0.25;  // seconds between hyprctl cursor re-queries
 constexpr double kMaxDt = 0.1;            // clamp a single frame time (s)
+
+// The vision check (map mesh raytrace + per-enemy occlusion rays) is far
+// too heavy to run every engine tick, so each player's result is cached and
+// recomputed at most once per kViscacheInterval. New targets recompute
+// immediately because their stamp starts at 0.
+constexpr double kViscacheInterval = 0.5; // seconds
+constexpr int kVisCacheMax = 128;         // CS2 max_clients is 64
+
+struct VisCache {
+    std::array<char, kVisCacheMax> visible{};
+    std::array<double, kVisCacheMax> stamp{};
+};
+VisCache g_vis;
+
+bool VisArmed(int index, double now) {
+    if (index < 0 || index >= kVisCacheMax)
+        return true;
+    return g_vis.stamp[index] <= 0.0 ||
+           (now - g_vis.stamp[index]) >= kViscacheInterval;
+}
+
+void VisStore(int index, double now, bool ok) {
+    if (index < 0 || index >= kVisCacheMax)
+        return;
+    g_vis.visible[index] = ok ? 1 : 0;
+    g_vis.stamp[index] = now;
+}
+
+bool VisGet(int index) {
+    if (index < 0 || index >= kVisCacheMax)
+        return true;
+    return g_vis.visible[index] != 0;
+}
 constexpr float kTargetLostRadius = 48.0f; // px: how far a target may drift before lock breaks
 
 double NowSeconds() {
@@ -365,7 +399,7 @@ int MouseAim::ValidateTarget() {
     return -1;
 }
 
-bool MouseAim::SelectNearestEnemy() {
+bool MouseAim::SelectNearestEnemy(double now) {
     auto& cache = Cache::Get();
     auto& matrix = cache.game.view_matrix;
     const auto& local = cache.local;
@@ -403,14 +437,18 @@ bool MouseAim::SelectNearestEnemy() {
             continue;
 
         // ── Visibility check: ALWAYS enforced to prevent wall-tracking ──
+        // Runs at most once every 500 ms per player (mesh raytracing is
+        // expensive); the cached result is reused between recomputes.
         // 1) Map raytrace: is the path from eye to head blocked by world geometry?
         //    Returns true when no .tri file is loaded (assume visible).
         const Vec3_t head = PlayerHeadWorld(player);
-        const bool map_clear = MapRaytrace::IsVisible(
-            {eye.x, eye.y, eye.z}, {head.x, head.y, head.z});
-
-        // 2) Player occlusion: is another player body-blocking the shot?
-        const bool no_player_block = !HeadOccluded(eye, head, cache.players, player.index);
+        if (VisArmed(player.index, now)) {
+            const bool map_clear = MapRaytrace::IsVisible(
+                {eye.x, eye.y, eye.z}, {head.x, head.y, head.z});
+            // 2) Player occlusion: is another player body-blocking the shot?
+            const bool no_player_block = !HeadOccluded(eye, head, cache.players, player.index);
+            VisStore(player.index, now, map_clear && no_player_block);
+        }
 
         // 3) Spotted state: has CS2 flagged this enemy as visible?
         //    When visible_only is on, require spotted. When off, use as
@@ -420,7 +458,7 @@ bool MouseAim::SelectNearestEnemy() {
 
         // Block if world geometry or another player is in the way.
         // This prevents aiming through walls even when visible_only is off.
-        if (!map_clear || !no_player_block)
+        if (!VisGet(player.index))
             continue;
 
         // When visible_only is on, also require spotted state.
@@ -508,7 +546,7 @@ void MouseAim::Update() {
     // The magenta scanner feeds targets of its own; the memory-based enemy
     // picker only runs when the scanner is off.
     if (!has_target_ && cfg::aim::aim_at_enemies)
-        SelectNearestEnemy();
+        SelectNearestEnemy(now);
     if (!has_target_) {
         MaybeResyncCursor(now);
         return;
@@ -614,11 +652,14 @@ void MouseAim::Update() {
             }
         }
         if (found) {
-            const Vec3_t eye = PlayerEye(cache.local);
-            const bool map_clear = MapRaytrace::IsVisible(
-                {eye.x, eye.y, eye.z}, {head.x, head.y, head.z});
-            const bool no_block = !HeadOccluded(eye, head, cache.players, locked_player_index_);
-            target_visible_ = map_clear && no_block;
+            if (VisArmed(locked_player_index_, now)) {
+                const Vec3_t eye = PlayerEye(cache.local);
+                const bool map_clear = MapRaytrace::IsVisible(
+                    {eye.x, eye.y, eye.z}, {head.x, head.y, head.z});
+                const bool no_block = !HeadOccluded(eye, head, cache.players, locked_player_index_);
+                VisStore(locked_player_index_, now, map_clear && no_block);
+            }
+            target_visible_ = VisGet(locked_player_index_);
         } else {
             target_visible_ = false;
         }

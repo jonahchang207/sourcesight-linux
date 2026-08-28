@@ -58,7 +58,7 @@ private:
 
     static void Init();
     static void MaybeResyncCursor(double now);
-    static bool SelectNearestEnemy();
+    static bool SelectNearestEnemy(double now);
     static int ValidateTarget();
 
     // Unlocked variants for internal use while Update() holds mtx_.
