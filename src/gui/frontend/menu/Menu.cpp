@@ -58,7 +58,7 @@ struct SectionState {
 };
 static std::unordered_map<ImGuiID, SectionState> g_section_states;
 
-bool BeginGlassSection(const char* label) {
+bool BeginGlassSection(const char* label, bool body_enabled = true) {
     auto& io = ImGui::GetIO();
     ImGuiID id = ImGui::GetID(label);
     auto& state = g_section_states[id];
@@ -140,6 +140,10 @@ bool BeginGlassSection(const char* label) {
         ImGui::PushStyleColor(ImGuiCol_ChildBg, WithAlpha(kSurfaceElev2, 0.55f * ease));
         ImGui::PushStyleColor(ImGuiCol_Border, WithAlpha(kBorderBase, 0.95f * ease));
         ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ease);
+        // Module-level disables (e.g. aim off) must not lock the header;
+        // they are re-applied here so only the settings inside go inert.
+        if (!body_enabled)
+            ImGui::BeginDisabled(true);
         // Let the section body use its natural height. The parent content
         // child owns scrolling, so expanded sections remain reachable instead
         // of being clipped by a viewport-sized nested child.
@@ -151,9 +155,11 @@ bool BeginGlassSection(const char* label) {
     return drawing;
 }
 
-void EndGlassSection(bool is_open) {
+void EndGlassSection(bool is_open, bool body_enabled = true) {
     if (is_open) {
         ImGui::EndChild();
+        if (!body_enabled)
+            ImGui::EndDisabled();
         ImGui::PopStyleColor(2);
         ImGui::PopStyleVar(2); // ChildBorderSize + Child
     }
@@ -657,7 +663,6 @@ void Menu::RenderImpl() {
                     ImGui::Checkbox("MB5 hotkey toggle", &cfg::aim::hotkey);
 
                     ImGui::Spacing();
-                    ImGui::BeginDisabled(!cfg::aim::enabled);
                     {
                         ImGui::Checkbox("Game mode (CS2)", &cfg::aim::game_mode);
                         ImGui::Checkbox("Aim at enemies", &cfg::aim::aim_at_enemies);
@@ -667,15 +672,15 @@ void Menu::RenderImpl() {
 
                         ImGui::Spacing();
 
-                        if (BeginGlassSection("Target")) {
+                        if (BeginGlassSection("Target##aim", cfg::aim::enabled)) {
                             static const char* target_parts[] = { "Head", "Body", "Legs", "Neck / Mid-body" };
                             int tp = cfg::aim::target_part;
                             if (ImGui::Combo("Target", &tp, target_parts, 4))
                                 cfg::aim::target_part = tp;
-                            EndGlassSection(true);
+                            EndGlassSection(true, cfg::aim::enabled);
                         }
 
-                        if (BeginGlassSection("Weapon Speed")) {
+                        if (BeginGlassSection("Weapon Speed", cfg::aim::enabled)) {
                             ImGui::SliderFloat("Rifle", &cfg::aim::rifle_mult, 0.2f, 3.0f, "x%.1f");
                             ImGui::SliderFloat("Pistol", &cfg::aim::pistol_mult, 0.2f, 3.0f, "x%.1f");
                             ImGui::SliderFloat("Sniper", &cfg::aim::sniper_mult, 0.2f, 3.0f, "x%.1f");
@@ -683,28 +688,27 @@ void Menu::RenderImpl() {
                             ImGui::Spacing();
                             ImGui::SliderFloat("Recoil comp", &cfg::aim::recoil_compensation, 0.0f, 1.0f, "%.0f%%");
                             ImGui::SliderFloat("Switch delay", &cfg::aim::target_switch_delay, 0.0f, 0.5f, "%.2fs");
-                            EndGlassSection(true);
+                            EndGlassSection(true, cfg::aim::enabled);
                         }
 
-                        if (BeginGlassSection("FOV")) {
+                        if (BeginGlassSection("FOV", cfg::aim::enabled)) {
                             float aim_w = 1920.0f, aim_h = 1080.0f;
                             MouseAim::ScreenSize(aim_w, aim_h);
                             const float fsr = std::sqrt(aim_w * aim_w + aim_h * aim_h) * 0.5f;
                             ImGui::SliderFloat("FOV radius", &cfg::aim::fov_radius, 0.0f, fsr, "%.0f px");
                             ImGui::SliderFloat("Exit FOV multiplier", &cfg::aim::exit_fov_mult, 1.0f, 2.5f, "x%.2f");
                             ImGui::SetItemTooltip("Targets are released only beyond FOV x this, so a moving target just past the ring edge keeps its lock (hysteresis).");
-                            EndGlassSection(true);
+                            EndGlassSection(true, cfg::aim::enabled);
                         }
 
-                        if (BeginGlassSection("Movement")) {
+                        if (BeginGlassSection("Movement", cfg::aim::enabled)) {
                             ImGui::SliderFloat("Smoothness", &cfg::aim::smoothness, 0.02f, 1.0f, "%.2f");
                             ImGui::SetItemTooltip("Proportional gain; lower = softer, less twitchy finish.");
                             ImGui::SliderFloat("Lead time", &cfg::aim::lead_time, 0.0f, 0.5f, "%.3fs");
                             ImGui::SetItemTooltip("Extrapolate the aim ahead of a moving target by this many seconds of its screen velocity.");
-                            EndGlassSection(true);
+                            EndGlassSection(true, cfg::aim::enabled);
                         }
                     }
-                    ImGui::EndDisabled();
 
                     ImGui::Spacing();
                     ImGui::TextWrapped("F9: panic key (disables all). MB5 or F10: toggle aim.");
@@ -728,41 +732,39 @@ void Menu::RenderImpl() {
                     ImGui::SetItemTooltip("Hold Left Alt to activate triggerbot");
 
                     ImGui::Spacing();
-                    ImGui::BeginDisabled(!cfg::triggerbot::enabled);
                     {
                         ImGui::Checkbox("Visible only", &cfg::triggerbot::visible_only);
                         ImGui::SetItemTooltip("Only fire at enemies you can see");
 
                         ImGui::Spacing();
 
-                        if (BeginGlassSection("Target")) {
+                        if (BeginGlassSection("Target##trigger", cfg::triggerbot::enabled)) {
                             static const char* target_parts[] = { "Head", "Body", "Legs", "Neck / Mid-body" };
                             int tp = cfg::aim::target_part;
                             if (ImGui::Combo("Target", &tp, target_parts, 4))
                                 cfg::aim::target_part = tp;
-                            EndGlassSection(true);
+                            EndGlassSection(true, cfg::triggerbot::enabled);
                         }
 
-                        if (BeginGlassSection("Fire Settings")) {
+                        if (BeginGlassSection("Fire Settings", cfg::triggerbot::enabled)) {
                             ImGui::SliderInt("Fire delay (ms)", &cfg::triggerbot::delay_ms, 0, 200);
                             ImGui::SetItemTooltip("Delay before firing (0 = instant)");
                             ImGui::SliderInt("Burst count", &cfg::triggerbot::burst_count, 1, 10);
                             ImGui::SetItemTooltip("Shots per trigger activation");
                             ImGui::SliderInt("Burst delay (ms)", &cfg::triggerbot::burst_delay_ms, 20, 300);
                             ImGui::SetItemTooltip("Delay between burst shots");
-                            EndGlassSection(true);
+                            EndGlassSection(true, cfg::triggerbot::enabled);
                         }
 
-                        if (BeginGlassSection("Weapon Filter")) {
+                        if (BeginGlassSection("Weapon Filter", cfg::triggerbot::enabled)) {
                             ImGui::Checkbox("Pistols only", &cfg::triggerbot::pistols_only);
                             ImGui::Checkbox("Rifles only", &cfg::triggerbot::rifles_only);
                             if (cfg::triggerbot::pistols_only && cfg::triggerbot::rifles_only) {
                                 cfg::triggerbot::rifles_only = false;
                             }
-                            EndGlassSection(true);
+                            EndGlassSection(true, cfg::triggerbot::enabled);
                         }
                     }
-                    ImGui::EndDisabled();
 
                     ImGui::Spacing();
                     ImGui::TextWrapped("Hold Left Alt to fire when crosshair is on an enemy.");
