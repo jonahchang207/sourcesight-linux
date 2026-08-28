@@ -131,7 +131,7 @@ bool BeginGlassSection(const char* label) {
     }
 
     ImGui::PopStyleColor(4);
-    ImGui::PopStyleVar(2);
+    ImGui::PopStyleVar(3); // ItemSpacing + FrameRounding + FramePadding
 
     // ── Body (revealed area) ─────────────────────────────────────────
     if (drawing) {
