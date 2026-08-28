@@ -167,6 +167,14 @@ namespace cfg {
 		// 0 = head, 1 = body (chest), 2 = legs, 3 = in-between body & head
 		inline int target_part = 3;
 
+		// Target picker. Always runs inside the FOV ring; this decides which
+		// visible enemy to lock onto when more than one qualifies.
+		//   0 = crosshair proximity (closest to the crosshair wins)
+		//   1 = distance          (nearest enemy wins)
+		//   2 = health            (weakest enemy wins)
+		//   3 = distance, inverse (farthest enemy wins — sniping)
+		inline int priority = 0;
+
 		// Weapon-specific speed multipliers (fraction of base speed).
 		inline float rifle_mult = 1.0f;
 		inline float pistol_mult = 1.2f;

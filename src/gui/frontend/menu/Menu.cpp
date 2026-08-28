@@ -692,6 +692,12 @@ void Menu::RenderImpl() {
                             int tp = cfg::aim::target_part;
                             if (ImGui::Combo("Target", &tp, target_parts, 4))
                                 cfg::aim::target_part = tp;
+                            static const char* priorities[] = { "Closest to crosshair", "Nearest enemy", "Lowest HP", "Farthest enemy" };
+                            int prio = cfg::aim::priority;
+                            if (ImGui::Combo("Priority", &prio, priorities, 4)) {
+                                cfg::aim::priority = std::clamp(prio, 0, 3);
+                            }
+                            ImGui::SetItemTooltip("Which enemy to lock when several are in the FOV ring. Closest to crosshair is the classic feel; Lowest HP hunts the weakest target first.");
                             EndGlassSection(true, cfg::aim::enabled);
                         }
 

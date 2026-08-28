@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Refuses commits that would pull GitHub Copilot's (or other assistant
+# tooling's) auto-generated files into the repository.
+set -u
+
+fail=0
+
+# 1) Block the artifact files Copilot / Copilot Chat auto-create when you
+#    work in VS Code, and stray metadata around the driver modules.
+blocked_names=(
+    "copilot-instructions.md"
+    "AGENTS.md"
+    ".git-copilot-commit-tool.md"
+    ".outline.md"
+    ".didyouknow.md"
+    "copilot.metadata.json"
+)
+
+for f in $(git diff --cached --name-only --diff-filter=ACMRT); do
+    base="${f##*/}"
+    for name in "${blocked_names[@]}"; do
+        if [[ "$base" == "$name" ]]; then
+            echo "pre-commit: blocking '$f' (assistant auto-generated file)." >&2
+            echo "  Remove it from the index with: git rm --cached \"$f\"" >&2
+            fail=1
+        fi
+    done
+    # Any file path carrying the tool's name (e.g. .vscode/copilot/…).
+    if [[ "$base" == *".copilot"* ]]; then
+        echo "pre-commit: blocking '$f' (assistant metadata)." >&2
+        fail=1
+    fi
+done
+
+if [[ $fail -ne 0 ]]; then
+    echo "pre-commit: refusing commit." >&2
+    exit 1
+fi
+exit 0

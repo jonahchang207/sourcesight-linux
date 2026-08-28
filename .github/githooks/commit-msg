@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Refuses commit messages that credit an assistant tool as an author. The
+# 'Co-authored-by: <name>' trailer is what makes a bot show up on GitHub's
+# Contributors graph — Copilot and friends add it automatically when asked
+# to write a commit message, so gate the final message here (the trailer
+# lives in the message, not in the diff, so this cannot be checked in the
+# pre-commit hook).
+set -u
+
+msg_file="$1"
+if [[ -r "$msg_file" ]] && grep -qE "^[[:space:]]*Co-authored-by:[[:space:]]*Copilot" \
+    "$msg_file"; then
+    echo "commit-msg: refusing 'Co-authored-by: Copilot' trailer (keeps the bot off the contributor list)." >&2
+    exit 1
+fi
+exit 0

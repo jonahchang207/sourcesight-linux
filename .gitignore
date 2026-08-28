@@ -10,6 +10,12 @@ config.json
 configs/
 crashlog.txt
 
+# VSCode / GitHub Copilot auto-generated files (keep them out of the repo)
+copilot-instructions.md
+.github/copilot-instructions.md
+AGENTS.md
+opencode.json
+
 # Ignore all the offsets.json files but the one in the folder offsets for the auto updater
 offsets.json
 !offsets/offsets.json 

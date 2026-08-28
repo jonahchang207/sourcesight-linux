@@ -25,8 +25,10 @@ constexpr double kMaxDt = 0.1;            // clamp a single frame time (s)
 // The vision check (map mesh raytrace + per-enemy occlusion rays) is far
 // too heavy to run every engine tick, so each player's result is cached and
 // recomputed at most once per kViscacheInterval. New targets recompute
-// immediately because their stamp starts at 0.
-constexpr double kViscacheInterval = 0.5; // seconds
+// immediately because their stamp starts at 0. Cache hits spread over ticks
+// via a per-index phase offset so the raytracer's spikes don't stack into a
+// single frame.
+constexpr double kViscacheInterval = 0.15; // seconds (≈7 updates/s per player)
 constexpr int kVisCacheMax = 128;         // CS2 max_clients is 64
 
 struct VisCache {
@@ -38,8 +40,12 @@ VisCache g_vis;
 bool VisArmed(int index, double now) {
     if (index < 0 || index >= kVisCacheMax)
         return true;
-    return g_vis.stamp[index] <= 0.0 ||
-           (now - g_vis.stamp[index]) >= kViscacheInterval;
+    // Stagger per-player recomputes so 10 enemies don't raytrace in the
+    // same tick. phase ∈ [0, interval); the average cadence stays ≈ interval.
+    const double phase = static_cast<double>(index % 9) * (kViscacheInterval / 9.0);
+    if (g_vis.stamp[index] <= 0.0)
+        return true;
+    return (now + phase - g_vis.stamp[index]) >= kViscacheInterval;
 }
 
 void VisStore(int index, double now, bool ok) {
@@ -101,14 +107,6 @@ std::pair<float, float> MonitorSize() {
     catch (const std::exception&) {
     }
     return fallback;
-}
-
-// World-space head position read straight from memory (head bone), with the
-// eye height as a fallback when the skeleton is unavailable.
-Vec3_t PlayerHeadWorld(const Player& player) {
-    if (player.bone_list.size() > static_cast<size_t>(bone_index::head))
-        return player.bone_list[bone_index::head].pos;
-    return player.pos + Vec3_t(0.f, 0.f, 64.f);
 }
 
 // World-space aim position based on cfg::aim::target_part:
@@ -418,6 +416,7 @@ bool MouseAim::SelectNearestEnemy(double now) {
     int best_index = -1;
     float best_x = 0.0f;
     float best_y = 0.0f;
+    float best_score = std::numeric_limits<float>::max();
     float best_dist = std::numeric_limits<float>::max();
 
     for (auto& player : cache.players) {
@@ -437,16 +436,20 @@ bool MouseAim::SelectNearestEnemy(double now) {
             continue;
 
         // ── Visibility check: ALWAYS enforced to prevent wall-tracking ──
-        // Runs at most once every 500 ms per player (mesh raytracing is
-        // expensive); the cached result is reused between recomputes.
-        // 1) Map raytrace: is the path from eye to head blocked by world geometry?
-        //    Returns true when no .tri file is loaded (assume visible).
-        const Vec3_t head = PlayerHeadWorld(player);
+        // Runs at most once every 150 ms per player (mesh raytracing is
+        // expensive); the cached result is reused between recomputes, spread
+        // across ticks so the cost doesn't spike.
+        // 1) Map raytrace: is the path from eye to the ACTUAL aim point (the
+        //    target_part bone) blocked by world geometry? Checking the real
+        //    aim point instead of the head keeps the lock off a body that is
+        //    behind cover while only the head peeks. Returns true when no
+        //    .tri file is loaded (assume visible).
+        const Vec3_t aimpt = PlayerAimWorld(player);
         if (VisArmed(player.index, now)) {
             const bool map_clear = MapRaytrace::IsVisible(
-                {eye.x, eye.y, eye.z}, {head.x, head.y, head.z});
+                {eye.x, eye.y, eye.z}, {aimpt.x, aimpt.y, aimpt.z});
             // 2) Player occlusion: is another player body-blocking the shot?
-            const bool no_player_block = !HeadOccluded(eye, head, cache.players, player.index);
+            const bool no_player_block = !HeadOccluded(eye, aimpt, cache.players, player.index);
             VisStore(player.index, now, map_clear && no_player_block);
         }
 
@@ -465,7 +468,30 @@ bool MouseAim::SelectNearestEnemy(double now) {
         if (!spotted_ok)
             continue;
 
-        if (dist_sq < best_dist) {
+        // ── target prioritisation ────────────────────────────────────
+        // The FOV gate above already confined candidates to the acquisition
+        // ring; this decides WHICH one to lock. Crosshair proximity (0) is
+        // the classic feel; distance (1) hunts the nearest target even off
+        // to one side; health (2) focuses the weakest target first.
+        // dist_sq doubles as the tie-break so equal-scoring targets don't
+        // make the picker flicker between enemies.
+        float score = dist_sq;
+        if (cfg::aim::priority == 1) {
+            const Vec3_t d = player.pos - local.pos;
+            score = d.x * d.x + d.y * d.y + d.z * d.z;
+        }
+        else if (cfg::aim::priority == 2) {
+            score = static_cast<float>(std::max(0, player.health));
+        }
+        else if (cfg::aim::priority == 3) {
+            // Farthest away — sniping/long-range preference.
+            const Vec3_t d = player.pos - local.pos;
+            score = -(d.x * d.x + d.y * d.y + d.z * d.z);
+        }
+
+        if (score < best_score ||
+            (score == best_score && dist_sq < best_dist)) {
+            best_score = score;
             best_dist = dist_sq;
             best_x = screen.x;
             best_y = screen.y;
@@ -644,14 +670,15 @@ void MouseAim::Update() {
 
     // ── vision check: map raytrace + player occlusion ───────────────
     // Uses the parsed map collision mesh to cast a ray from our eye to
-    // the target's head. If the ray hits a wall/prop triangle, the
-    // target is behind cover. Also checks if another player is body-blocking.
+    // the target's actual aim point (target_part aware). If the ray hits
+    // a wall/prop triangle, the target is behind cover. Also checks if
+    // another player is body-blocking.
     if (auto_target_ && locked_player_index_ >= 0) {
         bool found = false;
-        Vec3_t head;
+        Vec3_t aimpt;
         for (auto& p : cache.players) {
             if (p.index == locked_player_index_) {
-                head = PlayerHeadWorld(p);
+                aimpt = PlayerAimWorld(p);
                 found = true;
                 break;
             }
@@ -660,8 +687,8 @@ void MouseAim::Update() {
             if (VisArmed(locked_player_index_, now)) {
                 const Vec3_t eye = PlayerEye(cache.local);
                 const bool map_clear = MapRaytrace::IsVisible(
-                    {eye.x, eye.y, eye.z}, {head.x, head.y, head.z});
-                const bool no_block = !HeadOccluded(eye, head, cache.players, locked_player_index_);
+                    {eye.x, eye.y, eye.z}, {aimpt.x, aimpt.y, aimpt.z});
+                const bool no_block = !HeadOccluded(eye, aimpt, cache.players, locked_player_index_);
                 VisStore(locked_player_index_, now, map_clear && no_block);
             }
             target_visible_ = VisGet(locked_player_index_);
@@ -720,8 +747,11 @@ void MouseAim::Update() {
     }
 
     // ── movement algorithm → desired position ───────────────────────
-    // Distance-based easing: fast when far, decelerates near target.
-    // This gives the snappy acquisition + smooth finish feel.
+    // Classic aim-assist controller: a constant approach speed while the
+    // target is far out, blending into a proportional finish as the
+    // crosshair closes in. This is the travel behaviour other aim tools
+    // use — linear and steady, no cubic FOV easing — and it reads as
+    // natural rather than "snap".
     float dx = aim_x - ref_x;
     float dy = aim_y - ref_y;
     const float dist = std::sqrt(dx * dx + dy * dy);
@@ -731,31 +761,16 @@ void MouseAim::Update() {
     const float max_delta = std::max(1.0f, cfg::aim::max_delta);
     const float base_speed = std::max(0.0f, cfg::aim::speed) * weapon_mult;
 
-    // Normalised progress: 0 = at edge of FOV, 1 = on target.
-    // Capped to [0.05, 1] so there is always some movement when locked.
-    const float t = std::clamp(dist / fov, 0.05f, 1.0f);
-
-    // Ease-in-out cubic gives fast mid-range + soft landing.
-    float ease;
-    if (t < 0.5f)
-        ease = 4.0f * t * t * t;          // accelerate (0→0.5)
-    else
-        ease = 1.0f - std::pow(-2.0f * t + 2.0f, 3.0f) / 2.0f; // decelerate (0.5→1)
-
-    // Desired delta = speed × dt, scaled by easing.
-    float step = base_speed * dt * ease;
-
-    // ── smoothness: proportional floor ─────────────────────────────
-    // The eased pace collapses to ~0 as the crosshair closes in on the
-    // target, which used to stall the aim 15-40px short of the head — the
-    // "follows it within the radius but never settles on it" behaviour.
-    // Force the proportional term (smooth * dist) to always apply so the
-    // remaining gap actually closes, then re-apply the per-frame cap.
-    // smooth is clamped to (0, 1], so step <= dist: monotonic, no overshoot.
+    // Proportional term dominates near the target, constant speed far out,
+    // whichever is larger wins. Both are scaled by dt.
     const float smooth = std::clamp(cfg::aim::smoothness, 0.02f, 1.0f);
-    step = std::max(step, smooth * dist);
+    float step = std::max(smooth * dist, base_speed * dt);
 
-    // Apply per-frame cap so close-range corrections stay tight.
+    // Never overshoot: a step larger than the remaining error would reverse
+    // each tick and hunt around the aim point.
+    step = std::min(step, dist);
+    // Per-frame cap keeps close-range corrections tight and bounds the
+    // amount one tick can move the view.
     step = std::min(step, max_delta);
 
     // Scale to unit direction.
