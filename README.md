@@ -93,7 +93,7 @@ The Aim tab shows a live driver status line (green when `/dev/person-mouse`
 is ready, red with the install command when it is not), so a missing driver
 is impossible to miss.
 
-### Config (`config.json` → `aim`)
+### Config (`configs/<profile>.json` → `aim`)
 
 ```jsonc
 "aim": {
@@ -142,9 +142,11 @@ cmake --build build --parallel
 1. Start CS2 and switch to **fullscreen-windowed** mode (the overlay does not
    render over true fullscreen).
 2. From the repo root, run `./build/sourcesight` — the binary looks for
-   `config.json` and the `maps/` folder next to itself, so either copy them
-   into `build/` or run from the repo root. `config.json` is user-specific
-   and gitignored; the overlay runs with defaults if it is missing.
+   the `configs/` folder (named profile files) and the `maps/` folder next to
+   itself. Profiles are per-user and gitignored; on first run a legacy
+   `config.json` is imported into the `default` profile, otherwise the overlay
+   starts from defaults. Switch/create/load/save profiles in
+   **Settings → Profiles**, and `End` still saves the active profile on exit.
 3. `Insert` toggles the menu, `End` saves and exits. Linux is click-through
    while playing, so right `Shift` is intentionally not a toggle key (it
    reaches CS2 and would walk-close the menu).

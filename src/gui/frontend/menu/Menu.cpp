@@ -1,5 +1,6 @@
 #include "Menu.hpp"
 
+#include "config/Config.hpp"
 #include "core/engine/cache/Cache.hpp"
 #include "core/input/MouseAim.hpp"
 #include "core/engine/classes/SkinChanger.hpp"
@@ -1013,6 +1014,95 @@ void Menu::RenderImpl() {
                 {
                     ImGui::TextColored(kAccent, "Settings");
                     ImGui::Separator();
+
+                    if (BeginGlassSection("Profiles")) {
+                        static std::vector<std::string> profiles;
+                        static int sel = -1;
+                        static char new_name[48]{};
+                        static std::string pending_delete;
+                        static bool profiles_ready = false;
+
+                        auto refresh_profiles = [&]() {
+                            profiles = Config::ListProfiles();
+                            const std::string active = Config::GetActiveProfile();
+                            sel = 0;
+                            for (size_t i = 0; i < profiles.size(); ++i)
+                                if (profiles[i] == active) { sel = (int)i; break; }
+                            if (profiles.empty()) sel = -1;
+                        };
+
+                        if (!profiles_ready) {
+                            profiles_ready = true;
+                            refresh_profiles();
+                        }
+
+                        ImGui::TextColored(kTextSecondary, "Active profile: %s",
+                                           Config::GetActiveProfile().c_str());
+                        ImGui::SetNextItemWidth(-1);
+                        const char* preview = (sel >= 0 && sel < (int)profiles.size())
+                                                  ? profiles[sel].c_str()
+                                                  : "none";
+                        if (ImGui::BeginCombo("##profiles", preview)) {
+                            for (int i = 0; i < (int)profiles.size(); ++i) {
+                                if (ImGui::Selectable(profiles[i].c_str(), i == sel))
+                                    sel = i;
+                            }
+                            ImGui::EndCombo();
+                        }
+
+                        if (SapphireButton("Load Profile", ImVec2(-1, 30))) {
+                            if (sel >= 0 && Config::LoadProfile(profiles[sel]))
+                                refresh_profiles();
+                        }
+                        if (SapphireButton("Save to this Profile", ImVec2(-1, 30))) {
+                            if (sel >= 0 && Config::SaveProfile(profiles[sel]))
+                                refresh_profiles();
+                        }
+                        ImGui::SetItemTooltip(
+                            "Overwrite the selected profile with the current settings.");
+
+                        ImGui::Spacing();
+                        ImGui::Separator();
+                        ImGui::Spacing();
+
+                        ImGui::SetNextItemWidth(-1);
+                        ImGui::InputTextWithHint("##new_profile", "New profile name",
+                                                 new_name, sizeof(new_name));
+                        if (SapphireButton("Create New Profile from Current Settings",
+                                           ImVec2(-1, 30))) {
+                            const std::string name(new_name);
+                            if (!name.empty() && Config::SaveProfile(name)) {
+                                new_name[0] = '\0';
+                                refresh_profiles();
+                            }
+                        }
+
+                        if (sel >= 0) {
+                            ImGui::Spacing();
+                            if (DangerButton("Delete Selected Profile", ImVec2(-1, 26))) {
+                                pending_delete = profiles[sel];
+                                ImGui::OpenPopup("Delete Profile?");
+                            }
+                        }
+
+                        if (ImGui::BeginPopupModal("Delete Profile?", nullptr,
+                                                   ImGuiWindowFlags_AlwaysAutoResize)) {
+                            ImGui::TextWrapped("Delete profile '%s'?\nThis cannot be undone.",
+                                               pending_delete.c_str());
+                            ImGui::Spacing();
+                            if (DangerButton("Delete", ImVec2(110, 26))) {
+                                if (Config::DeleteProfile(pending_delete))
+                                    refresh_profiles();
+                                ImGui::CloseCurrentPopup();
+                            }
+                            ImGui::SameLine();
+                            if (SapphireButton("Cancel", ImVec2(110, 26)))
+                                ImGui::CloseCurrentPopup();
+                            ImGui::EndPopup();
+                        }
+
+                        EndGlassSection(true);
+                    }
 
                     if (BeginGlassSection("Display")) {
                         if (ImGui::Checkbox("Streamproof", &cfg::settings::streamproof))

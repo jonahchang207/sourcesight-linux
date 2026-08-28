@@ -2,20 +2,177 @@
 #include "core/engine/classes/SkinChanger.hpp"
 #include "core/engine/classes/SkinDatabase.hpp"
 
+#include <algorithm>
+#include <cctype>
+#include <filesystem>
+#include <fstream>
+#include <mutex>
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Profile plumbing
+// ─────────────────────────────────────────────────────────────────────────────
+
+Config::Config() {
+	EnsureConfigDir();
+
+	// One-time import of a legacy single-file config into the active profile so
+	// existing setups keep their settings after the move to profiles.
+	const std::string active = GetActiveProfile();
+	const std::string active_path = ProfilePath(active);
+	std::error_code ec;
+	if (!std::filesystem::exists(active_path, ec) &&
+	    std::filesystem::exists("config.json", ec)) {
+		std::filesystem::copy_file(
+			"config.json", active_path,
+			std::filesystem::copy_options::overwrite_existing, ec);
+		if (!ec)
+			LOGF(INFO, "Imported legacy config.json into profile '{}'", active);
+	}
+
+	EnsureMeta();
+}
+
+std::string Config::GetActiveProfile() {
+	std::string name = "default";
+	{
+		std::ifstream f(MetaPath());
+		if (f.good()) {
+			try {
+				json meta = json::parse(f);
+				name = meta.value("active", name);
+			}
+			catch (...) { /* fall back to default */ }
+		}
+	}
+	const std::string clean = SanitizeName(name);
+	return clean.empty() ? "default" : clean;
+}
+
+void Config::SetActiveProfile(const std::string& name) {
+	const std::string clean = SanitizeName(name);
+	if (clean.empty()) return;
+	EnsureConfigDir();
+	json meta;
+	meta["active"] = clean;
+	std::ofstream f(MetaPath());
+	f << std::setw(4) << meta << std::endl;
+}
+
+std::vector<std::string> Config::ListProfiles() {
+	EnsureConfigDir();
+	std::vector<std::string> out;
+	std::error_code ec;
+	for (const auto& entry : std::filesystem::directory_iterator(ProfileDir(), ec)) {
+		if (!entry.is_regular_file(ec)) continue;
+		if (entry.path().extension() != ".json") continue;
+		if (entry.path().filename() == "meta.json") continue;
+		out.push_back(entry.path().stem().string());
+	}
+	std::sort(out.begin(), out.end());
+	return out;
+}
+
+bool Config::HasProfile(const std::string& name) {
+	const std::string clean = SanitizeName(name);
+	return !clean.empty() && std::filesystem::exists(ProfilePath(clean));
+}
+
+bool Config::LoadProfile(const std::string& name) {
+	const std::string clean = SanitizeName(name);
+	if (clean.empty()) {
+		LOGF(WARNING, "Invalid profile name, refusing to load");
+		return false;
+	}
+	SetActiveProfile(clean);
+	const bool ok = GetInstance().ReadImpl(ProfilePath(clean));
+	LOGF(INFO, "Loaded profile '{}'", clean);
+	return ok;
+}
+
+bool Config::SaveProfile(const std::string& name) {
+	const std::string clean = SanitizeName(name);
+	if (clean.empty()) {
+		LOGF(WARNING, "Invalid profile name, refusing to save");
+		return false;
+	}
+	EnsureConfigDir();
+	SetActiveProfile(clean);
+	const bool ok = GetInstance().WriteImpl(ProfilePath(clean));
+	LOGF(INFO, "Saved profile '{}'", clean);
+	return ok;
+}
+
+bool Config::DeleteProfile(const std::string& name) {
+	const std::string clean = SanitizeName(name);
+	if (clean.empty()) return false;
+	std::error_code ec;
+	std::filesystem::remove(ProfilePath(clean), ec);
+	if (!ec && GetActiveProfile() == clean)
+		SetActiveProfile("default");
+	LOGF(INFO, "Deleted profile '{}'", clean);
+	return !ec;
+}
+
 bool Config::Read() {
-	return GetInstance().ReadImpl();
+	std::lock_guard lock(Mutex());
+	return GetInstance().ReadImpl(ProfilePath(GetActiveProfile()));
 }
 
 bool Config::Write() {
-	return GetInstance().WriteImpl();
+	std::lock_guard lock(Mutex());
+	return GetInstance().WriteImpl(ProfilePath(GetActiveProfile()));
 }
 
-bool Config::ReadImpl() {
-	std::ifstream f("config.json");
+std::string Config::ProfileDir() { return "configs"; }
+std::string Config::MetaPath() { return ProfileDir() + "/meta.json"; }
+std::string Config::ProfilePath(const std::string& name) {
+	return ProfileDir() + "/" + SanitizeName(name) + ".json";
+}
+
+bool Config::EnsureConfigDir() {
+	std::error_code ec;
+	std::filesystem::create_directories(ProfileDir(), ec);
+	return !ec;
+}
+
+void Config::EnsureMeta() {
+	if (std::filesystem::exists(MetaPath())) return;
+	SetActiveProfile(GetActiveProfile());
+}
+
+std::mutex& Config::Mutex() {
+	static std::mutex m;
+	return m;
+}
+
+// Sanitise a profile name into a safe filename component. Strips path
+// separators and any character that could escape the configs/ directory, so a
+// hostile or accidental name can never read/write outside of it. Returns "" for
+// names that become empty (e.g. "." or "..").
+std::string Config::SanitizeName(const std::string& name) {
+	std::string out;
+	out.reserve(name.size());
+	for (const unsigned char c : name) {
+		if (std::isalnum(c) || c == '-' || c == '_' || c == ' ' || c == '.')
+			out += static_cast<char>(c);
+	}
+
+	auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
+	const auto first = std::find_if(out.begin(), out.end(), [&](char c) { return !is_space(static_cast<unsigned char>(c)); });
+	const auto last = std::find_if(out.rbegin(), out.rend(), [&](char c) { return !is_space(static_cast<unsigned char>(c)); }).base();
+	if (first >= last) return "";
+	std::string trimmed(first, last);
+	if (trimmed == "." || trimmed == "..") return "";
+	if (trimmed.size() > 40) trimmed.resize(40);
+	return trimmed;
+}
+
+bool Config::ReadImpl(const std::string& path) {
+	std::ifstream f(path);
 
 	if (!f.good()) {
 		LOGF(INFO, "Configuration file does not exist; creating defaults");
-		WriteImpl();
+		WriteImpl(path);
 		return false;
 	}
 
@@ -25,7 +182,7 @@ bool Config::ReadImpl() {
 	}
 	catch (const std::exception& e) {
 		LOGF(WARNING, "Failed to parse configuration file ({}); restoring defaults", e.what());
-		WriteImpl();
+		WriteImpl(path);
 		return false;
 	}
 
@@ -241,7 +398,7 @@ bool Config::ReadImpl() {
 	}
 	catch (const std::exception& e) {
 		LOGF(WARNING, "Invalid configuration value ({}); restoring defaults", e.what());
-		WriteImpl();
+		WriteImpl(path);
 		return false;
 	}
 
@@ -249,8 +406,9 @@ bool Config::ReadImpl() {
 	return true;
 }
 
-bool Config::WriteImpl() {
-	std::ofstream f("config.json");
+bool Config::WriteImpl(const std::string& path) {
+	EnsureConfigDir();
+	std::ofstream f(path);
 
 	json data;
 
