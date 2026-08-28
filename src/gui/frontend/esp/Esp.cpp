@@ -820,14 +820,6 @@ void Esp::RenderBulletTracers(Player player, const std::vector<Player>& players,
 }
 
 void Esp::RenderAimFov() {
-	// Status label: always visible so the user knows if aim is live.
-	const char* status = cfg::aim::enabled ? "AIM ON" : "AIM OFF";
-	const ImU32 status_col = cfg::aim::enabled
-		? IM_COL32(110, 255, 150, 235) : IM_COL32(150, 160, 155, 150);
-	const auto status_size = ImGui::CalcTextSize(status);
-	d->AddText(ImVec2(io.DisplaySize.x * 0.5f - status_size.x * 0.5f, 20.0f),
-			status_col, status);
-
 	// FOV ring: only drawn when aim is enabled.  Shows the acquisition
 	// zone around the crosshair where enemies can be locked onto.
 	if (!cfg::aim::enabled)

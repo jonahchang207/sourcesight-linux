@@ -679,13 +679,15 @@ void MouseAim::Update() {
     // Desired delta = speed × dt, scaled by easing.
     float step = base_speed * dt * ease;
 
-    // ── smoothness: soft proportional cap ──────────────────────────
-    // Lower values only chase a fraction of the remaining error each tick,
-    // which makes the finish much less twitchy. Won't slow far acquisition
-    // (the ease term governs there); it primarily tames the landing.
+    // ── smoothness: proportional floor ─────────────────────────────
+    // The eased pace collapses to ~0 as the crosshair closes in on the
+    // target, which used to stall the aim 15-40px short of the head — the
+    // "follows it within the radius but never settles on it" behaviour.
+    // Force the proportional term (smooth * dist) to always apply so the
+    // remaining gap actually closes, then re-apply the per-frame cap.
+    // smooth is clamped to (0, 1], so step <= dist: monotonic, no overshoot.
     const float smooth = std::clamp(cfg::aim::smoothness, 0.02f, 1.0f);
-    const float prop_cap = smooth * dist;
-    step = std::min(step, prop_cap);
+    step = std::max(step, smooth * dist);
 
     // Apply per-frame cap so close-range corrections stay tight.
     step = std::min(step, max_delta);

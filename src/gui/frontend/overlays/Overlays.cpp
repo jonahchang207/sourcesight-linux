@@ -54,6 +54,9 @@ void Overlays::RenderImpl() {
     {
         RenderWatermark();
 
+        // Always-on aim state so a hotkey/F10/panic toggle is never invisible.
+        RenderAimStatus();
+
         RenderNotice();
 
     #ifdef _DEBUG
@@ -107,6 +110,21 @@ void Overlays::RenderWatermark() {
         IM_COL32(255, 255, 255, 255),
         watermark_string.data()
     );
+}
+
+void Overlays::RenderAimStatus() {
+    // Hides itself while the menu is open (the menu already shows it).
+    if (Renderer::IsOpen())
+        return;
+
+    const char* status = cfg::aim::enabled ? "AIM ON" : "AIM OFF";
+    const ImU32 col = cfg::aim::enabled
+        ? IM_COL32(110, 255, 150, 235)
+        : IM_COL32(150, 160, 155, 255);
+    auto& io = ImGui::GetIO();
+    const auto size = ImGui::CalcTextSize(status);
+    ImGui::GetBackgroundDrawList()->AddText(
+        ImVec2(io.DisplaySize.x * 0.5f - size.x * 0.5f, 20.0f), col, status);
 }
 
 void Overlays::RenderNotice() {
