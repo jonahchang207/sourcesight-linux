@@ -158,7 +158,29 @@ void Triggerbot::UpdateImpl() {
         if (!is_rifle) return;
     }
 
-    if (!IsCrosshairOnEnemy())
+    // On-target check. When the aim is actively locked on the enemy we
+    // trust its (EMA-smoothed) lock distance against the configured
+    // threshold — steady even under aim jitter. Otherwise fall back to the
+    // raw head projection, same radius.
+    const bool on_enemy = IsCrosshairOnEnemy();
+    const bool aim_locked_on = cfg::aim::enabled && MouseAim::Locked() &&
+                               MouseAim::OnTarget(cfg::triggerbot::threshold);
+
+    // Dwell debounce: the aim point and raw projection jitter a pixel or
+    // two per frame; hold on-target briefly so a transient flick can't fire
+    // a burst on empty air. Small enough to stay snappy when used alongside
+    // the aim, large enough to silence its noise.
+    static double on_target_since = 0.0;
+    using namespace std::chrono;
+    static const auto dwell_epoch = steady_clock::now();
+    const double now_s = duration<double>(steady_clock::now() - dwell_epoch).count();
+    if (!on_enemy && !aim_locked_on) {
+        on_target_since = 0.0;
+        return;
+    }
+    if (on_target_since == 0.0)
+        on_target_since = now_s;
+    if ((now_s - on_target_since) * 1000.0 < cfg::triggerbot::dwell_ms)
         return;
 
     Burst();
@@ -170,7 +192,7 @@ bool Triggerbot::IsCrosshairOnEnemy() {
     const auto& players = cache.players;
     const auto& game = cache.game;
 
-    const float crosshair_radius = 12.0f; // pixels: how close to crosshair
+    const float crosshair_radius = std::max(1.0f, cfg::triggerbot::threshold); // px: how close to crosshair
 
     for (const auto& player : players) {
         if (!player.alive)

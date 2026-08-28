@@ -180,6 +180,7 @@ namespace cfg {
 		inline float max_delta = 24.0f;         // Max pixels per frame the crosshair may move
 		inline float speed = 2600.0f;           // Top approach velocity in px/second
 		inline float smoothness = 0.22f;        // 0..1 proportional gain; lower = smoother
+		inline float aim_smoothing = 0.50f;     // EMA weight (0..1) on the tracked aim point; 1 = raw (jittery)
 		inline float lead_time = 0.25f;         // Seconds of enemy velocity extrapolation (tracking)
 		inline float fov_radius = 350.0f;       // Acquisition radius (px around crosshair)
 		inline float exit_fov_mult = 1.6f;      // Release happens only beyond fov*this (hysteresis)
@@ -198,6 +199,8 @@ namespace cfg {
 		inline int delay_ms = 0;            // Delay before firing (0 = instant)
 		inline int burst_count = 1;         // Shots per trigger (1 = semi-auto)
 		inline int burst_delay_ms = 80;     // Delay between burst shots
+		inline float threshold = 12.0f;     // On-target radius (px) for the crosshair check
+		inline int dwell_ms = 25;           // Debounce: hold on target this long before firing
 		inline bool pistols_only = false;   // Only trigger with pistols
 		inline bool rifles_only = false;    // Only trigger with rifles
 	}

@@ -349,6 +349,7 @@ bool Config::ReadImpl(const std::string& path) {
 			cfg::aim::max_delta = aim.value("max_delta", 24.0f);
 			cfg::aim::speed = aim.value("speed", 2600.0f);
 			cfg::aim::smoothness = aim.value("smoothness", 0.22f);
+			cfg::aim::aim_smoothing = aim.value("aim_smoothing", 0.50f);
 			cfg::aim::lead_time = aim.value("lead_time", 0.25f);
 			cfg::aim::fov_radius = aim.value("fov_radius", 350.0f);
 			cfg::aim::exit_fov_mult = aim.value("exit_fov_mult", 1.6f);
@@ -375,6 +376,8 @@ bool Config::ReadImpl(const std::string& path) {
 			cfg::triggerbot::delay_ms = tb.value("delay_ms", 0);
 			cfg::triggerbot::burst_count = tb.value("burst_count", 1);
 			cfg::triggerbot::burst_delay_ms = tb.value("burst_delay_ms", 80);
+			cfg::triggerbot::threshold = tb.value("threshold", 12.0f);
+			cfg::triggerbot::dwell_ms = tb.value("dwell_ms", 25);
 			cfg::triggerbot::pistols_only = tb.value("pistols_only", false);
 			cfg::triggerbot::rifles_only = tb.value("rifles_only", false);
 		}
@@ -563,6 +566,7 @@ bool Config::WriteImpl(const std::string& path) {
 	data["aim"]["target_switch_delay"] = cfg::aim::target_switch_delay;
 	data["aim"]["fov_radius"] = cfg::aim::fov_radius;
 	data["aim"]["smoothness"] = cfg::aim::smoothness;
+	data["aim"]["aim_smoothing"] = cfg::aim::aim_smoothing;
 	data["aim"]["lead_time"] = cfg::aim::lead_time;
 	data["aim"]["exit_fov_mult"] = cfg::aim::exit_fov_mult;
 	data["aim"]["toggle_key"] = cfg::aim::toggle_key;
@@ -582,6 +586,8 @@ bool Config::WriteImpl(const std::string& path) {
 	data["triggerbot"]["delay_ms"] = cfg::triggerbot::delay_ms;
 	data["triggerbot"]["burst_count"] = cfg::triggerbot::burst_count;
 	data["triggerbot"]["burst_delay_ms"] = cfg::triggerbot::burst_delay_ms;
+	data["triggerbot"]["threshold"] = cfg::triggerbot::threshold;
+	data["triggerbot"]["dwell_ms"] = cfg::triggerbot::dwell_ms;
 	data["triggerbot"]["pistols_only"] = cfg::triggerbot::pistols_only;
 	data["triggerbot"]["rifles_only"] = cfg::triggerbot::rifles_only;
 

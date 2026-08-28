@@ -586,8 +586,13 @@ void MouseAim::Update() {
                 ClearTargetUnlocked();
                 return;
             }
-            target_x_ = screen.x;
-            target_y_ = screen.y;
+            // EMA-smooth the aim point: bone screen positions wobble a few
+            // px/tick and chasing the raw sample makes the crosshair shiver
+            // even on a stationary head. The filtered point trails the raw
+            // head slightly but stays still, killing most of the jitter.
+            const float ksm = std::clamp(cfg::aim::aim_smoothing, 0.05f, 1.0f);
+            target_x_ += ksm * (screen.x - target_x_);
+            target_y_ += ksm * (screen.y - target_y_);
             break;
         }
         if (!found) {

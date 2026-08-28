@@ -719,6 +719,8 @@ void Menu::RenderImpl() {
                         if (BeginGlassSection("Movement", cfg::aim::enabled)) {
                             ImGui::SliderFloat("Smoothness", &cfg::aim::smoothness, 0.02f, 1.0f, "%.2f");
                             ImGui::SetItemTooltip("Proportional gain; lower = softer, less twitchy finish.");
+                            ImGui::SliderFloat("Target smoothing", &cfg::aim::aim_smoothing, 0.05f, 1.0f, "%.2f");
+                            ImGui::SetItemTooltip("EMA on the tracked aim point. 1.0 = raw (bone jitter makes it shiver); lower values are steadier but trail a moving target slightly.");
                             ImGui::SliderFloat("Lead time", &cfg::aim::lead_time, 0.0f, 0.5f, "%.3fs");
                             ImGui::SetItemTooltip("Extrapolate the aim ahead of a moving target by this many seconds of its screen velocity.");
                             EndGlassSection(true, cfg::aim::enabled);
@@ -758,6 +760,8 @@ void Menu::RenderImpl() {
                             int tp = cfg::aim::target_part;
                             if (ImGui::Combo("Target", &tp, target_parts, 4))
                                 cfg::aim::target_part = tp;
+                            ImGui::SliderFloat("On-target radius", &cfg::triggerbot::threshold, 4.0f, 60.0f, "%.0f px");
+                            ImGui::SetItemTooltip("How close the crosshair must be to the enemy before firing. Raise it to trigger sooner when strafing or if the aim is slightly off.");
                             EndGlassSection(true, cfg::triggerbot::enabled);
                         }
 
@@ -768,6 +772,8 @@ void Menu::RenderImpl() {
                             ImGui::SetItemTooltip("Shots per trigger activation");
                             ImGui::SliderInt("Burst delay (ms)", &cfg::triggerbot::burst_delay_ms, 20, 300);
                             ImGui::SetItemTooltip("Delay between burst shots");
+                            ImGui::SliderInt("Dwell (ms)", &cfg::triggerbot::dwell_ms, 0, 200);
+                            ImGui::SetItemTooltip("Debounce: hold the crosshair on the enemy this long before firing (0 = instant). Higher suppresses accidental bursts from aim jitter; 25ms is near-instant.");
                             EndGlassSection(true, cfg::triggerbot::enabled);
                         }
 
