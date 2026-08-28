@@ -38,6 +38,7 @@ namespace offsets
 		constexpr std::ptrdiff_t m_angEyeAngles = 0x41E0; // QAngle - C_CSPlayerPawn (0x41D0 in the Jul dump, +0x10 for build 14177/14178)
 
 		constexpr std::ptrdiff_t m_entitySpottedState = 0x2AE8; // EntitySpottedState_t - C_CSPlayerPawn
+		constexpr std::ptrdiff_t m_bSpotted = 0x8; // bool - EntitySpottedState_t (is this pawn seen by a spotted-by mask)
 		constexpr std::ptrdiff_t m_bSpottedByMask = 0xC; // uint32[2] - EntitySpottedState_t
 
 		constexpr std::ptrdiff_t m_flFlashOverlayAlpha = 0x13A4; // float32 - C_CSPlayerPawnBase

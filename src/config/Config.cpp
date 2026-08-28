@@ -14,7 +14,7 @@ bool Config::ReadImpl() {
 	std::ifstream f("config.json");
 
 	if (!f.good()) {
-		LOGF(FATAL, "Configuration file does not exist, creating a new one");
+		LOGF(INFO, "Configuration file does not exist; creating defaults");
 		WriteImpl();
 		return false;
 	}
@@ -24,7 +24,7 @@ bool Config::ReadImpl() {
 		data = json::parse(f);
 	}
 	catch (const std::exception& e) {
-		LOGF(FATAL, "Failed to parse configuration file");
+		LOGF(WARNING, "Failed to parse configuration file ({}); restoring defaults", e.what());
 		WriteImpl();
 		return false;
 	}
@@ -189,9 +189,13 @@ bool Config::ReadImpl() {
 			cfg::aim::recoil_compensation = aim.value("recoil_compensation", 0.0f);
 			cfg::aim::target_switch_delay = aim.value("target_switch_delay", 0.0f);
 			cfg::aim::deadzone = aim.value("deadzone", 1.0f);
-			cfg::aim::max_delta = aim.value("max_delta", 15.0f);
-			cfg::aim::speed = aim.value("speed", 900.0f);
+			cfg::aim::max_delta = aim.value("max_delta", 24.0f);
+			cfg::aim::speed = aim.value("speed", 2600.0f);
+			cfg::aim::smoothness = aim.value("smoothness", 0.22f);
+			cfg::aim::lead_time = aim.value("lead_time", 0.25f);
 			cfg::aim::fov_radius = aim.value("fov_radius", 350.0f);
+			cfg::aim::exit_fov_mult = aim.value("exit_fov_mult", 1.6f);
+			cfg::aim::toggle_key = aim.value("toggle_key", 292);
 		}
 
 		// bypass
@@ -236,7 +240,7 @@ bool Config::ReadImpl() {
 		}
 	}
 	catch (const std::exception& e) {
-		LOGF(FATAL, "Failed to parse configuration");
+		LOGF(WARNING, "Invalid configuration value ({}); restoring defaults", e.what());
 		WriteImpl();
 		return false;
 	}
@@ -399,6 +403,10 @@ bool Config::WriteImpl() {
 	data["aim"]["recoil_compensation"] = cfg::aim::recoil_compensation;
 	data["aim"]["target_switch_delay"] = cfg::aim::target_switch_delay;
 	data["aim"]["fov_radius"] = cfg::aim::fov_radius;
+	data["aim"]["smoothness"] = cfg::aim::smoothness;
+	data["aim"]["lead_time"] = cfg::aim::lead_time;
+	data["aim"]["exit_fov_mult"] = cfg::aim::exit_fov_mult;
+	data["aim"]["toggle_key"] = cfg::aim::toggle_key;
 
 	// bypass
 	data["bypass"]["timing_jitter"] = cfg::bypass::timing_jitter;

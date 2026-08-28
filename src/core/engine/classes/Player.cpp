@@ -42,8 +42,6 @@ bool Player::Update() {
 
 bool Player::GetController() {
 	auto p = Engine::GetProcess();
-	auto client = Engine::GetClient();
-
 	this->controller = p->read<DWORD64>(list_entry + (index + 1) * 0x70); // before was 0x78
 
 	return this->controller != 0;
@@ -62,18 +60,10 @@ bool Player::GetPawn() {
 	// Pawns live in the same global entity list as everything else.
 	this->pawn = Game::ResolveHandle(this->entity_list, entity_pawn_handle);
 
-	static bool pawn_diag_done = false;
-	if (!this->pawn && !pawn_diag_done) {
-		pawn_diag_done = true;
-		const uintptr_t chunk = p->read<uintptr_t>(this->entity_list + 8 * (((entity_pawn_handle & 0x7FFF) >> 9) & 0x3F));
-		const uintptr_t slot = chunk ? chunk + 0x70 * (entity_pawn_handle & 0x1FF) : 0;
-		LOGF(WARNING,
-			"Pawn resolution failed: el=0x{:X} ctrl=0x{:X} handle=0x{:08X} idx={} chunk=0x{:X} slot=0x{:X} slot_handle=0x{:08X} slot_inst=0x{:X}",
-			this->entity_list, this->controller, entity_pawn_handle, entity_pawn_handle & 0x7FFF,
-			chunk, slot,
-			slot ? p->read<std::uint32_t>(slot + 0x10) : 0,
-			slot ? p->read<uintptr_t>(slot) : 0);
-	}
+	// A missing pawn is normal while players are spawning, spectating, or
+	// changing teams. Keep this path quiet; persistent offset failures are
+	// reported by the engine's offset validation instead of once per session.
+
 
 	return this->pawn != 0;
 }
@@ -133,7 +123,10 @@ bool Player::UpdatePawn() {
 
 	this->armor = p->read<int>(pawn + offsets::pawn::m_ArmorValue);
 	this->defusing = p->read<bool>(pawn + offsets::pawn::m_bIsDefusing);
-	this->spotted = p->read<bool>(pawn + offsets::pawn::m_entitySpottedState + offsets::pawn::m_bSpottedByMask);
+	// m_bSpotted is the "is this pawn currently seen" flag. The old code read
+	// m_bSpottedByMask (+0xC, a uint32[2] team mask) as a bool, which was nearly
+	// always nonzero and made "visible only" useless.
+	this->spotted = p->read<bool>(pawn + offsets::pawn::m_entitySpottedState + offsets::pawn::m_bSpotted);
 	this->flashed = p->read<float>(pawn + offsets::pawn::m_flFlashOverlayAlpha) > 0;
 	this->scoped = p->read<bool>(pawn + offsets::pawn::m_bIsScoped);
 

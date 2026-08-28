@@ -141,6 +141,13 @@ void Esp::RenderImpl() {
 	if (cfg::settings::panic_key && ImGui::IsKeyPressed(ImGuiKey_F9))
 		cfg::settings::panic_key_pressed = true;
 
+	// Aim toggle key (render thread). CS2 grabs raw mouse input, which starves
+	// the evdev MB5 listener, so also honour a keyboard toggle here. Only reacts
+	// to the configured toggle_key (edge-triggered via IsKeyPressed).
+	if (cfg::aim::hotkey && cfg::aim::toggle_key > 0 &&
+		ImGui::IsKeyPressed(static_cast<ImGuiKey>(cfg::aim::toggle_key)))
+		cfg::aim::toggle_requested = true;
+
 	if (!cfg::enabled)
 		return;
 

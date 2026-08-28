@@ -466,8 +466,11 @@ void Window::SetMenuCapture(bool enabled, float x, float y, float w, float h) {
     ApplyClickThrough();
 }
 bool Window::SetAffinity(NativeWindow, WindowAffinity affinity) {
-    if (affinity != WindowAffinity::Disabled)
-        LOGF(WARNING, "Streamproof capture affinity is not available under Hyprland");
+    static bool limitation_logged = false;
+    if (affinity != WindowAffinity::Disabled && !limitation_logged) {
+        limitation_logged = true;
+        LOGF(INFO, "[window] streamproof capture affinity is unavailable on Linux/Hyprland; continuing without compositor-level exclusion");
+    }
     return affinity == WindowAffinity::Disabled;
 }
 void Window::SetVSync(bool enable) {

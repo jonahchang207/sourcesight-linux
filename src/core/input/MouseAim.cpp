@@ -199,6 +199,9 @@ double MouseAim::last_resync_ = 0.0;
 bool MouseAim::has_target_ = false;
 float MouseAim::target_x_ = 0.0f;
 float MouseAim::target_y_ = 0.0f;
+float MouseAim::prev_target_x_ = 0.0f;
+float MouseAim::prev_target_y_ = 0.0f;
+double MouseAim::prev_target_time_ = 0.0;
 bool MouseAim::auto_target_ = false;
 int MouseAim::locked_player_index_ = -1;
 bool MouseAim::target_visible_ = false;
@@ -271,6 +274,8 @@ void MouseAim::ClearTargetUnlocked() {
     auto_target_ = false;
     locked_player_index_ = -1;
     target_visible_ = false;
+    // Reset velocity history so a new lock starts without stale extrapolation.
+    prev_target_time_ = 0.0;
 }
 
 bool MouseAim::TargetInfo(float& x, float& y, bool& visible) {
@@ -432,6 +437,16 @@ void MouseAim::Update() {
         LOGF(INFO, "[aim] toggled {}", cfg::aim::enabled ? "ON" : "OFF");
     }
 
+    // Keyboard toggle (F10 by default). The flag is set by the render thread
+    // (which owns ImGui) in Esp.cpp, because CS2 grabs raw mouse input and
+    // starves the evdev MB5 listener. Consumed here, same pattern as
+    // panic_key_pressed.
+    if (cfg::aim::toggle_requested) {
+        cfg::aim::toggle_requested = false;
+        cfg::aim::enabled = !cfg::aim::enabled;
+        LOGF(INFO, "[aim] toggled (key) {}", cfg::aim::enabled ? "ON" : "OFF");
+    }
+
     // Panic key: instantly disable all cheats.
     // The flag is set by the render thread (which owns ImGui).
     if (cfg::settings::panic_key_pressed) {
@@ -490,12 +505,42 @@ void MouseAim::Update() {
         ref_y = cursor_y_;
     }
 
-    const float error_x = target_x_ - ref_x;
-    const float error_y = target_y_ - ref_y;
+    // ── lead_time: extrapolate the aim point along the target's screen ──
+    // ── velocity. The target history is sampled here each tick so the      ──
+    // ── estimated velocity (px/s) survives FOV gates below.              ──
+    float aim_x = target_x_;
+    float aim_y = target_y_;
+    if (cfg::aim::lead_time > 0.0f) {
+        const double hist_dt = now - prev_target_time_;
+        if (prev_target_time_ > 0.0 && hist_dt > 0.001) {
+            const float vx = static_cast<float>((target_x_ - prev_target_x_) / hist_dt);
+            const float vy = static_cast<float>((target_y_ - prev_target_y_) / hist_dt);
+            // Clamp to a sane speed so a single bad sample can't fling the aim.
+            const float speed = std::sqrt(vx * vx + vy * vy);
+            const float kMaxAimSpeed = 8000.0f; // px/s well beyond anything playable
+            if (speed <= kMaxAimSpeed) {
+                aim_x += vx * cfg::aim::lead_time;
+                aim_y += vy * cfg::aim::lead_time;
+            }
+        }
+        prev_target_x_ = target_x_;
+        prev_target_y_ = target_y_;
+        prev_target_time_ = now;
+    }
+
+    const float err_x = aim_x - ref_x;
+    const float err_y = aim_y - ref_y;
 
     // ── FOV gate: only pursue targets inside the ring around the cursor ──
+    // Acquisition uses the configured fov_radius; once a target is locked, a
+    // wider ring (fov * exit_fov_mult) is used to release it, so a moving
+    // target that strays just past the edge of the ring doesn't dump the lock
+    // (hysteresis). Keeping the lock clear of the acquisition edge also
+    // reduces re-lock flicker between two near targets.
     const float fov = std::max(1.0f, cfg::aim::fov_radius);
-    if (error_x * error_x + error_y * error_y > fov * fov) {
+    const float lock_dist =
+        has_target_ ? fov * std::max(1.0f, cfg::aim::exit_fov_mult) : fov;
+    if (err_x * err_x + err_y * err_y > lock_dist * lock_dist) {
         ClearTargetUnlocked();
         return;
     }
@@ -591,8 +636,8 @@ void MouseAim::Update() {
     // ── movement algorithm → desired position ───────────────────────
     // Distance-based easing: fast when far, decelerates near target.
     // This gives the snappy acquisition + smooth finish feel.
-    float dx = target_x_ - ref_x;
-    float dy = target_y_ - ref_y;
+    float dx = aim_x - ref_x;
+    float dy = aim_y - ref_y;
     const float dist = std::sqrt(dx * dx + dy * dy);
     if (dist < 0.5f)
         return; // close enough — no movement needed
@@ -613,6 +658,14 @@ void MouseAim::Update() {
 
     // Desired delta = speed × dt, scaled by easing.
     float step = base_speed * dt * ease;
+
+    // ── smoothness: soft proportional cap ──────────────────────────
+    // Lower values only chase a fraction of the remaining error each tick,
+    // which makes the finish much less twitchy. Won't slow far acquisition
+    // (the ease term governs there); it primarily tames the landing.
+    const float smooth = std::clamp(cfg::aim::smoothness, 0.02f, 1.0f);
+    const float prop_cap = smooth * dist;
+    step = std::min(step, prop_cap);
 
     // Apply per-frame cap so close-range corrections stay tight.
     step = std::min(step, max_delta);

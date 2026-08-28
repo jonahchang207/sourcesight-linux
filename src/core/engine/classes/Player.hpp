@@ -6,8 +6,8 @@
 class Player {
 public:
     Player() {}
-    Player(int index, uintptr_t el, uintptr_t le) 
-        : index(index), entity_list(el), list_entry(le){}
+    Player(int index, uintptr_t el, uintptr_t le)
+        : index(index), list_entry(le), entity_list(el) {}
 
     bool Update();
     bool GetBounds(view_matrix_t matrix, Vec2_t size, std::pair<Vec2_t, Vec2_t>& bounds);

@@ -75,6 +75,12 @@ private:
     static float target_x_;
     static float target_y_;
 
+    // Previous-sample geometry used to estimate target screen velocity for
+    // lead_time extrapolation. Reset whenever the lock changes.
+    static float prev_target_x_;
+    static float prev_target_y_;
+    static double prev_target_time_;
+
     // True while the current target came from the auto enemy selection;
     // those targets are re-validated each tick and cleared on lock-break.
     static bool auto_target_;

@@ -153,9 +153,16 @@ namespace cfg {
 		inline bool enabled = false;
 		inline bool game_mode = true;
 		inline bool aim_at_enemies = true;
-		inline bool hotkey = true;
+		inline bool hotkey = true;            // MB5 (side button) toggles aim
 		inline bool visible_only = false;   // Only aim at visible (non-occluded) targets
 		inline bool auto_start = false;     // Auto-enable aim when round starts
+
+		// Set by the render thread when the aim-toggle key is pressed; consumed
+		// by MouseAim::Update (same pattern as panic_key_pressed).
+		inline bool toggle_requested = false;
+		// Keyboard key that toggles aim (in addition to MB5). Reliable even when
+		// CS2 grabs raw mouse input (which starves the evdev listener).
+		inline int toggle_key = 292;          // ImGuiKey_F10 (282 is covered by other binds)
 
 		// 0 = head, 1 = body (chest), 2 = legs, 3 = in-between body & head
 		inline int target_part = 3;
@@ -170,9 +177,12 @@ namespace cfg {
 		inline float target_switch_delay = 0.0f; // Seconds before switching targets
 
 		inline float deadzone = 1.0f;
-		inline float max_delta = 15.0f;
-		inline float speed = 900.0f;           // Increased from 650
-		inline float fov_radius = 350.0f;
+		inline float max_delta = 24.0f;         // Max pixels per frame the crosshair may move
+		inline float speed = 2600.0f;           // Top approach velocity in px/second
+		inline float smoothness = 0.22f;        // 0..1 proportional gain; lower = smoother
+		inline float lead_time = 0.25f;         // Seconds of enemy velocity extrapolation (tracking)
+		inline float fov_radius = 350.0f;       // Acquisition radius (px around crosshair)
+		inline float exit_fov_mult = 1.6f;      // Release happens only beyond fov*this (hysteresis)
 	}
 
 	// Triggerbot: auto-fire when crosshair is on an enemy.
