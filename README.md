@@ -15,6 +15,13 @@ chmod +x scripts/install-omarchy.sh
 ./scripts/install-omarchy.sh
 ```
 
+The one-command installer builds the project, then sets up the Hyprland window
+rules so the overlay stays above CS2 **without** the frosted-glass blur it
+would otherwise inherit over the game — it writes a `sourcesight` no_blur /
+no_shadow rule into `~/.config/hypr/` and also applies it immediately with
+`hyprctl eval` (the mechanism that works on Hyprland 0.55+). No manual config
+editing needed.
+
 Use CS2's fullscreen-windowed mode. Press `Insert` to toggle the menu and `End` to save and exit. On Linux the overlay is click-through while playing (clicks and keys always reach the game). While the menu is open the overlay captures *all* clicks, so nothing falls through to CS2: the menu, its color picker popups, and the draggable panels (radar, spectator list) are all fully mouse-usable, and keyboard navigation (arrow keys/Tab and Space/Enter) also works. One caveat: while alive in a round CS2 grabs the mouse, so clicks also reach CS2 and may fire your weapon — configure mid-round with the keyboard, or when dead/spectating with the mouse. Note that right `Shift` is intentionally *not* a toggle key on Linux: the overlay never steals keys, so right Shift also reaches CS2, where it is the walk key — toggling on it would close the menu every time you walk. If Linux denies memory reads, do not run the overlay as root; launch it as the same user/session as Steam and inspect your distribution's `kernel.yama.ptrace_scope` policy.
 
 ## 🎬 Showcase
@@ -136,6 +143,24 @@ cd sourcesight-linux
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ```
+
+**Prevent a blurred/frosted overlay (Omarchy/Hyprland):** by default Hyprland
+will blur and frost the transparent overlay over the game, which looks wrong and
+hurts readability. Tell the compositor to exempt the overlay and make it
+click-through by running the provided installer once (it installs the
+`no_blur` / `no_shadow` window rule for `SourceSight Linux` into
+`~/.config/hypr/` and applies it immediately with `hyprctl eval`, which is the
+mechanism that works on Hyprland 0.55+):
+
+```bash
+chmod +x scripts/install-omarchy.sh
+./scripts/install-omarchy.sh
+```
+
+This also builds the project, so you can skip the manual `cmake` steps above if
+you run it instead. The overlay itself also re-asserts the exclusion from
+inside the app at startup, so it works even on machines that never ran the
+installer.
 
 **Run it:**
 

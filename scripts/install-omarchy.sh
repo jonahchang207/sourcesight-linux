@@ -67,5 +67,19 @@ RULES
     fi
 fi
 hyprctl reload >/dev/null 2>&1 || true
-printf 'Built: %s/sourcesight\n' "${build_dir}"
+
+# Second layer of the blur/shadow exclusion: apply the rule immediately at the
+# compositor level via `hyprctl eval` (the supported runtime mechanism on
+# Hyprland 0.55+, where the legacy `windowrulev2` hyprlang path no longer works).
+# This de-frosts the overlay right away, independent of the config rule above.
+# Runs on X11/XWayland and native Wayland alike; harmless if `hyprctl` is absent.
+if command -v hyprctl >/dev/null 2>&1; then
+    hyprctl eval 'o.window({ class = "^SourceSight Linux$" }, { no_blur = true, no_shadow = true, no_focus = true, pin = true, float = true })' >/dev/null 2>&1 \
+        && echo "Applied SourceSight blur/shadow exclusion (hyprctl eval)" \
+        || echo "Could not apply blur/shadow exclusion via hyprctl eval (ignoring)"
+else
+    echo "hyprctl not found; blur/shadow exclusion applied via the config rule on next Hyprland reload"
+fi
+
+printf '\nBuilt: %s/sourcesight\n' "${build_dir}"
 printf 'Run CS2 in fullscreen-windowed mode, then run that executable.\n'

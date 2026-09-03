@@ -8,6 +8,7 @@
 #include <GLFW/glfw3native.h>
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
+#include <X11/Xutil.h>
 #include <X11/keysym.h>
 #include <X11/extensions/shape.h>
 #undef Window
@@ -267,26 +268,47 @@ bool GetOwnHyprlandAddress(std::string& out) {
     return true;
 }
 
-// Since Hyprland 0.55 (the Lua config era) window rules are defined declaratively
-// in the config via `hl.window_rule`, and the legacy `hyprctl keyword windowrulev2`
-// hyprlang path no longer applies effect rules (like blur) reliably. So the
-// authoritative fix for the frosted overlay is a rule in the user's Hyprland
-// config (see the `sourcesight` rule we add to rules.lua): it marks the overlay
-// `opaque` and `no_blur`, which stops Hyprland from blurring the game behind the
-// transparent framebuffer.
-//
-// The dispatch below is only a best-effort, harmless fallback for older Hyprland
-// (< 0.55) that still supports runtime `windowrulev2`. It uses the correct
-// `no_blur` property name.
-void ApplyHyprlandNoBlurRule() {
-    if (glfwGetPlatform() != GLFW_PLATFORM_WAYLAND)
-        return; // XWayland blur is handled in the X11 branch of SpawnWindow.
-    std::string addr;
-    if (!GetOwnHyprlandAddress(addr))
+// Set the overlay's X11 WM_CLASS to a stable, distinctive name
+// ("SourceSight Linux"). Hyprland class-based window rules match against this,
+// so the `sourcesight` no_blur/no_shadow rule (installed into ~/.config/hypr by
+// scripts/install-omarchy.sh) can actually find the overlay. Without this,
+// GLFW leaves the class as the plain executable name and the rule never fires,
+// leaving the overlay blurred/frosted over the game.
+void SetX11Class() {
+    if (glfwGetPlatform() != GLFW_PLATFORM_X11 || !Window::hwnd)
         return;
-    const std::string cmd = "hyprctl keyword windowrulev2 no_blur, address:" + addr + " >/dev/null 2>&1";
+    Display* display = glfwGetX11Display();
+    if (!display)
+        return;
+    const X11Window xwin = glfwGetX11Window(Window::hwnd);
+    XClassHint* hint = XAllocClassHint();
+    if (!hint)
+        return;
+    hint->res_name  = const_cast<char*>("sourcesight");
+    hint->res_class = const_cast<char*>("SourceSight Linux");
+    XSetClassHint(display, xwin, hint);
+    XFree(hint);
+    XFlush(display);
+}
+
+// Now that the overlay advertises the stable "SourceSight Linux" class, ask the
+// compositor to exempt it from blur/shadow. This keeps the fix entirely inside
+// the app, so it works without editing any Hyprland/Omarchy config.
+//
+// On Hyprland 0.55+ (the Lua config era) the legacy `hyprctl keyword
+// windowrulev2 no_blur,address:...` hyprlang path no longer applies effect
+// rules reliably, which is why the overlay stayed frosted. The supported
+// runtime mechanism is `hyprctl eval` with the same Lua `o.window(...)` rule
+// the install script writes to the config. We run that here so the exclusion
+// is applied regardless of the user's config. This is harmless on other
+// compositors: if `hyprctl` is missing the call simply fails silently.
+void ApplyHyprlandNoBlurRule() {
+    const std::string cmd =
+        "hyprctl eval 'o.window({ class = \"^SourceSight Linux$\" }, "
+        "{ no_blur = true, no_shadow = true, no_focus = true, pin = true, float = true })' "
+        ">/dev/null 2>&1";
     if (::system(cmd.c_str()) != 0)
-        LOGF(WARNING, "[window] runtime no_blur rule not applied (modern Hyprland uses config rules)");
+        LOGF(WARNING, "[window] runtime no_blur rule could not be applied (hyprctl unavailable?)");
 }
 
 } // namespace
@@ -342,6 +364,10 @@ bool Window::SpawnWindow() {
 
     SetX11AlwaysOnTop();
 
+    // Advertise the stable "SourceSight Linux" X11 class so Hyprland's
+    // class-based no_blur/no_shadow rules can match the overlay window.
+    SetX11Class();
+
     // Hyprland may tile a new window; an overlay must float above the game.
     // One-shot IPC: once our address is known, ask the compositor to float it.
     // (X11 windows honor the GLFW_FLOATING hint above instead.)
@@ -351,19 +377,10 @@ bool Window::SpawnWindow() {
             const std::string cmd = "hyprctl dispatch setfloating address:" + addr + " >/dev/null 2>&1";
             ::system(cmd.c_str());
         }
-        ApplyHyprlandNoBlurRule();
-    } else {
-        // XWayland overlay: Hyprland still blurs behind it. Ask for the same
-        // exemption using the X11 window id (visible in `hyprctl clients`).
-        Display* display = glfwGetX11Display();
-        if (display && hwnd) {
-            const X11Window xwin = glfwGetX11Window(hwnd);
-            char buf[32];
-            std::snprintf(buf, sizeof(buf), "0x%lx", static_cast<unsigned long>(xwin));
-            const std::string cmd = std::string("hyprctl keyword windowrulev2 no_blur, address:") + buf + " >/dev/null 2>&1";
-            ::system(cmd.c_str());
-        }
     }
+    // Apply the blur/shadow exemption from inside the app on both backends so
+    // the overlay is never frosted, independent of the user's Hyprland config.
+    ApplyHyprlandNoBlurRule();
 
     LOGF(INFO, "[window] overlay backend={} initial size={}x{}",
         glfwGetPlatform() == GLFW_PLATFORM_WAYLAND ? "wayland" : "x11",
