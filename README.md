@@ -9,7 +9,7 @@ External ESP overlay for Counter-Strike 2, built for **Omarchy Linux** (Hyprland
 SourceSight targets Omarchy's Hyprland session through GLFW's X11 backend (XWayland), OpenGL 3, and Linux `process_vm_readv`. It does not inject a library or write into the game process.
 
 ```bash
-git clone --recursive -b omarchy-port https://github.com/jonahchang207/sourcesight-linux.git
+git clone --recursive -b main https://github.com/jonahchang207/sourcesight-linux.git
 cd sourcesight-linux
 chmod +x scripts/install-omarchy.sh
 ./scripts/install-omarchy.sh
