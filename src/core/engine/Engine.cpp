@@ -5,6 +5,7 @@
 #include "core/engine/classes/Macro.hpp"
 #include "core/engine/classes/SkinChanger.hpp"
 #include "core/engine/classes/MapRaytrace.hpp"
+#include "core/engine/classes/MapExtractor.hpp"
 #include "core/input/MouseAim.hpp"
 #include "core/input/Triggerbot.hpp"
 #include "core/input/Spinbot.hpp"
@@ -45,6 +46,7 @@ bool Engine::InitImpl() {
 		LOGF(WARNING, "Failed to parse config, using default values");
 
 	MapRaytrace::Init();
+	MapExtractor::Init();
 	Triggerbot::Init();
 	Spinbot::Init();
 

@@ -3,6 +3,7 @@
 #include "core/engine/Engine.hpp" // Circular dep
 #include "core/offsets/Dumper.hpp"
 #include "core/engine/classes/MapRaytrace.hpp"
+#include "core/engine/classes/MapExtractor.hpp"
 
 bool Cache::Refresh() {
     return Get().RefreshImpl();
@@ -53,7 +54,7 @@ bool Cache::RefreshImpl() {
 		static std::string last_map;
 		std::string current_map(globals.map_name);
 		if (current_map != last_map) {
-			MapRaytrace::LoadMap(current_map);
+			MapExtractor::EnsureMapLoaded(current_map);
 			last_map = current_map;
 		}
 	}
