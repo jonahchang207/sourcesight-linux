@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <filesystem>
 #include <cstdlib>
+#include <cstdint>
+#include <unordered_map>
 
 // VisCheckCS2 parser for .vphys files
 #include "Parser.h"
@@ -24,6 +26,132 @@ namespace {
     std::vector<std::string> g_vpk_files;
 }
 
+// VPK file format structures (VPK v2)
+#pragma pack(push, 1)
+struct VPKHeader {
+    uint32_t signature;        // 0x55aa1234
+    uint32_t version;          // 2 for VPK v2
+    uint32_t tree_size;        // Size of directory tree in bytes
+    uint32_t file_data_section_size; // v2 only
+    uint32_t archive_md5_section_size; // v2 only
+    uint32_t other_md5_section_size;   // v2 only
+    uint32_t signature_section_size;   // v2 only
+};
+#pragma pack(pop)
+
+// Simple VPK extractor for specific files
+bool ExtractFileFromVPK(const std::string& vpk_path, const std::string& file_to_find, const std::string& output_path) {
+    std::ifstream vpk(vpk_path, std::ios::binary);
+    if (!vpk) {
+        LOGF(WARNING, "[vpk] Failed to open {}", vpk_path);
+        return false;
+    }
+
+    VPKHeader header;
+    vpk.read(reinterpret_cast<char*>(&header), sizeof(header));
+    
+    if (header.signature != 0x55aa1234 || header.version != 2) {
+        LOGF(WARNING, "[vpk] Invalid VPK header: sig=0x{:X} ver={}", header.signature, header.version);
+        return false;
+    }
+
+    LOGF(INFO, "[vpk] Reading VPK: tree_size={} bytes", header.tree_size);
+
+    // Read directory tree
+    std::vector<char> tree_data(header.tree_size);
+    vpk.read(tree_data.data(), header.tree_size);
+
+    // Parse directory tree to find our file
+    size_t pos = 0;
+    int file_count = 0;
+    while (pos < tree_data.size()) {
+        // Read extension
+        std::string ext(&tree_data[pos]);
+        pos += ext.size() + 1;
+        if (ext.empty()) break; // End of tree
+
+        while (pos < tree_data.size()) {
+            // Read path
+            std::string path(&tree_data[pos]);
+            pos += path.size() + 1;
+            if (path.empty()) break; // Next extension
+
+            while (pos < tree_data.size()) {
+                // Read filename
+                std::string filename(&tree_data[pos]);
+                pos += filename.size() + 1;
+                if (filename.empty()) break; // Next path
+
+                // Read file entry metadata
+                if (pos + 20 > tree_data.size()) return false;
+                
+                uint32_t crc32 = *reinterpret_cast<uint32_t*>(&tree_data[pos]); pos += 4;
+                uint16_t preload_bytes = *reinterpret_cast<uint16_t*>(&tree_data[pos]); pos += 2;
+                uint16_t archive_index = *reinterpret_cast<uint16_t*>(&tree_data[pos]); pos += 2;
+                uint32_t entry_offset = *reinterpret_cast<uint32_t*>(&tree_data[pos]); pos += 4;
+                uint32_t entry_length = *reinterpret_cast<uint32_t*>(&tree_data[pos]); pos += 4;
+                uint16_t terminator = *reinterpret_cast<uint16_t*>(&tree_data[pos]); pos += 2;
+
+                file_count++;
+                
+                // Check if this is our file
+                std::string full_path = path + "/" + filename + "." + ext;
+                if (full_path == file_to_find || filename + "." + ext == file_to_find) {
+                    LOGF(INFO, "[vpk] Found file: {} (archive_idx={}, offset={}, len={})", 
+                         full_path, archive_index, entry_offset, entry_length);
+                    
+                    // Found it! Read the file data
+                    size_t data_start = sizeof(VPKHeader) + header.tree_size + entry_offset;
+                    vpk.seekg(data_start);
+                    
+                    std::vector<char> file_data(entry_length);
+                    vpk.read(file_data.data(), entry_length);
+                    
+                    if (vpk.gcount() == static_cast<std::streamsize>(entry_length)) {
+                        std::ofstream out(output_path, std::ios::binary);
+                        out.write(file_data.data(), entry_length);
+                        LOGF(INFO, "[vpk] Successfully extracted to {}", output_path);
+                        return true;
+                    }
+                    
+                    LOGF(WARNING, "[vpk] Failed to read full file data (got {} of {} bytes)", vpk.gcount(), entry_length);
+                    
+                    // If not found in this VPK, try chunk files
+                    if (archive_index != 0x7FFF) {
+                        std::string chunk_path = vpk_path;
+                        size_t dot_pos = chunk_path.rfind(".vpk");
+                        if (dot_pos != std::string::npos) {
+                            chunk_path = chunk_path.substr(0, dot_pos) + "_" + 
+                                std::to_string(archive_index).substr(0, 3) + ".vpk";
+                        }
+                        
+                        LOGF(INFO, "[vpk] Trying chunk file: {}", chunk_path);
+                        std::ifstream chunk_vpk(chunk_path, std::ios::binary);
+                        if (chunk_vpk) {
+                            chunk_vpk.seekg(entry_offset);
+                            std::vector<char> chunk_data(entry_length);
+                            chunk_vpk.read(chunk_data.data(), entry_length);
+                            if (chunk_vpk.gcount() == static_cast<std::streamsize>(entry_length)) {
+                                std::ofstream out(output_path, std::ios::binary);
+                                out.write(chunk_data.data(), entry_length);
+                                LOGF(INFO, "[vpk] Successfully extracted from chunk: {}", output_path);
+                                return true;
+                            }
+                        }
+                    }
+                }
+
+                // Skip preload data if any
+                if (preload_bytes > 0) {
+                    pos += preload_bytes;
+                }
+            }
+        }
+    }
+    LOGF(INFO, "[vpk] File '{}' not found in VPK (searched {} files)", file_to_find, file_count);
+    return false;
+}
+
 bool Init() {
     if (g_initialized)
         return true;
@@ -36,27 +164,26 @@ bool Init() {
     }
     g_cs2_install_path = *cs2_path;
 
-    // Find all VPK files in cs2/maps/
-    std::string maps_vpk_dir = g_cs2_install_path + "/game/csgo/maps";
-    if (!std::filesystem::exists(maps_vpk_dir)) {
-        maps_vpk_dir = g_cs2_install_path + "/game/csgo/maps";
-    }
-    
-    // Also check for maps directly in the csgo folder (some installations)
-    std::string alt_maps_dir = g_cs2_install_path + "/csgo/maps";
-    if (!std::filesystem::exists(maps_vpk_dir) && std::filesystem::exists(alt_maps_dir)) {
-        maps_vpk_dir = alt_maps_dir;
-    }
+    // Find all VPK files in cs2/maps/ and csgo/ (for pak01_dir.vpk and chunks)
+    std::vector<std::string> vpk_dirs = {
+        g_cs2_install_path + "/game/csgo/maps",
+        g_cs2_install_path + "/game/csgo",
+        g_cs2_install_path + "/csgo/maps",
+        g_cs2_install_path + "/csgo",
+    };
 
     std::error_code ec;
-    for (const auto& entry : std::filesystem::directory_iterator(maps_vpk_dir, ec)) {
-        if (entry.is_regular_file() && entry.path().extension() == ".vpk") {
-            g_vpk_files.push_back(entry.path().string());
+    for (const auto& vpk_dir : vpk_dirs) {
+        if (!std::filesystem::exists(vpk_dir)) continue;
+        for (const auto& entry : std::filesystem::directory_iterator(vpk_dir, ec)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".vpk") {
+                g_vpk_files.push_back(entry.path().string());
+            }
         }
     }
 
     if (g_vpk_files.empty()) {
-        LOGF(WARNING, "[map_extractor] No VPK files found in {}", maps_vpk_dir);
+        LOGF(WARNING, "[map_extractor] No VPK files found in scanned directories");
     } else {
         LOGF(INFO, "[map_extractor] Found {} VPK files", g_vpk_files.size());
     }
@@ -153,25 +280,51 @@ ExtractResult ExtractMap(const std::string& map_name, const std::string& output_
     }
 
     // Try to find and extract world_physics.vphys from VPK
-    // Look for map VPK files
+    // Look for map VPK files (de_dust2.vpk, pak01_dir.vpk, etc.)
     std::string vphys_path;
+    std::string vphys_filename = "maps/" + map_name + "/world_physics.vphys";
+    
+    // Priority 1: Check map-specific VPK (de_dust2.vpk)
     for (const auto& vpk_file : g_vpk_files) {
-        // The map VPK would be named like de_mirage.vpk or in pak01_dir.vpk
-        // For now, check if the vpk contains the map
         std::string vpk_name = std::filesystem::path(vpk_file).stem().string();
-        if (vpk_name == map_name || vpk_name == "pak01_dir") {
-            // We found a relevant VPK - now we'd need to extract world_physics.vphys
-            // This requires full VPK parsing which is complex
-            // For now, check if .vphys file already exists in the maps folder
-            std::string local_vphys = output_dir + "/" + map_name + ".vphys";
-            if (std::filesystem::exists(local_vphys)) {
-                vphys_path = local_vphys;
+        if (vpk_name == map_name) {
+            LOGF(INFO, "[map_extractor] Trying to extract {} from {}", vphys_filename, vpk_file);
+            if (ExtractFileFromVPK(vpk_file, vphys_filename, output_dir + "/" + map_name + ".vphys")) {
+                vphys_path = output_dir + "/" + map_name + ".vphys";
+                LOGF(INFO, "[map_extractor] Successfully extracted .vphys from {}", vpk_file);
                 break;
             }
         }
     }
 
-    // If no local .vphys, try to find in CS2 install
+    LOGF(INFO, "[map_extractor] After priority 1, vphys_path empty: {}", vphys_path.empty());
+    
+    // Priority 2: Check pak01_dir.vpk (main package)
+    if (vphys_path.empty()) {
+        LOGF(INFO, "[map_extractor] Trying pak01_dir.vpk... (total VPKs: {})", g_vpk_files.size());
+        for (const auto& vpk_file : g_vpk_files) {
+            std::string vpk_name = std::filesystem::path(vpk_file).stem().string();
+            LOGF(INFO, "[map_extractor] Checking VPK: {} (stem: {})", vpk_file, vpk_name);
+            if (vpk_name == "pak01_dir") {
+                LOGF(INFO, "[map_extractor] Trying to extract {} from {}", vphys_filename, vpk_file);
+                if (ExtractFileFromVPK(vpk_file, vphys_filename, output_dir + "/" + map_name + ".vphys")) {
+                    vphys_path = output_dir + "/" + map_name + ".vphys";
+                    LOGF(INFO, "[map_extractor] Successfully extracted .vphys from {}", vpk_file);
+                    break;
+                }
+            }
+        }
+    }
+
+    // Priority 3: Check for already extracted .vphys in maps folder
+    if (vphys_path.empty()) {
+        std::string local_vphys = output_dir + "/" + map_name + ".vphys";
+        if (std::filesystem::exists(local_vphys)) {
+            vphys_path = local_vphys;
+        }
+    }
+
+    // Priority 4: Check for .vphys in CS2 install (expanded map)
     if (vphys_path.empty()) {
         std::string cs2_vphys = g_cs2_install_path + "/game/csgo/maps/" + map_name + "/world_physics.vphys";
         if (std::filesystem::exists(cs2_vphys)) {
@@ -179,13 +332,15 @@ ExtractResult ExtractMap(const std::string& map_name, const std::string& output_
         }
     }
 
-    // If still no .vphys, check for .vphys_c (compressed)
+    // Priority 5: Check for .vphys_c (compressed) - needs decompression via Source 2 Viewer
     if (vphys_path.empty()) {
         std::string cs2_vphys_c = g_cs2_install_path + "/game/csgo/maps/" + map_name + "/world_physics.vphys_c";
         if (std::filesystem::exists(cs2_vphys_c)) {
-            LOGF(INFO, "[map_extractor] Found compressed .vphys_c for {}, need decompression", map_name);
+            LOGF(INFO, "[map_extractor] Found compressed .vphys_c for {}", map_name);
             result.success = false;
-            result.error = "Found compressed .vphys_c - decompression not implemented. Use Source 2 Viewer to extract.";
+            result.error = "Found compressed .vphys_c - use Source 2 Viewer (ValveResourceFormat) to extract: "
+                           "Open pak01_dir.vpk in Source 2 Viewer, find maps/" + map_name + "/world_physics.vphys_c, "
+                           "extract and decompress to .vphys, then convert to .tri with VPhysToOpt.";
             return result;
         }
     }
