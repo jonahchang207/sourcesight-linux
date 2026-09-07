@@ -41,6 +41,12 @@ bool Init() {
     if (!std::filesystem::exists(maps_vpk_dir)) {
         maps_vpk_dir = g_cs2_install_path + "/game/csgo/maps";
     }
+    
+    // Also check for maps directly in the csgo folder (some installations)
+    std::string alt_maps_dir = g_cs2_install_path + "/csgo/maps";
+    if (!std::filesystem::exists(maps_vpk_dir) && std::filesystem::exists(alt_maps_dir)) {
+        maps_vpk_dir = alt_maps_dir;
+    }
 
     std::error_code ec;
     for (const auto& entry : std::filesystem::directory_iterator(maps_vpk_dir, ec)) {
@@ -68,11 +74,15 @@ std::optional<std::string> FindCS2InstallPath() {
     // Method 3: Use Steam API if available
 
     std::vector<std::string> common_paths = {
-        // Linux Steam default
+        // Linux Steam default - CS2 is installed as "Counter-Strike Global Offensive" (app 730)
         std::string(std::getenv("HOME")) + "/.steam/steam/steamapps/common/Counter-Strike 2",
+        std::string(std::getenv("HOME")) + "/.steam/steam/steamapps/common/Counter-Strike Global Offensive",
         std::string(std::getenv("HOME")) + "/.local/share/Steam/steamapps/common/Counter-Strike 2",
+        std::string(std::getenv("HOME")) + "/.local/share/Steam/steamapps/common/Counter-Strike Global Offensive",
         "/mnt/steam/steamapps/common/Counter-Strike 2",
+        "/mnt/steam/steamapps/common/Counter-Strike Global Offensive",
         "/home/steam/steamapps/common/Counter-Strike 2",
+        "/home/steam/steamapps/common/Counter-Strike Global Offensive",
         // Windows (if running via Wine/Proton)
         "C:/Program Files (x86)/Steam/steamapps/common/Counter-Strike 2",
         "C:/Program Files/Steam/steamapps/common/Counter-Strike 2",
