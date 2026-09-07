@@ -10,6 +10,11 @@
 #include <filesystem>
 #include <cstdlib>
 
+// VisCheckCS2 parser for .vphys files
+#include "Parser.h"
+#include "OptimizedGeometry.h"
+#include "Math.hpp"
+
 namespace MapExtractor {
 
 namespace {
@@ -137,25 +142,91 @@ ExtractResult ExtractMap(const std::string& map_name, const std::string& output_
         return result;
     }
 
-    // Try to find the map in VPK files
-    // We need to extract world_physics.vmdl_c from the map's VPK
-    // This requires VPK parsing + vmdl_c (KV3) parsing
-    
-    // For now, try to call external extractor tool if available
-    // The C# tool (cs2-phys-extractor) can do this automatically
-    
+    // Try to find and extract world_physics.vphys from VPK
+    // Look for map VPK files
+    std::string vphys_path;
+    for (const auto& vpk_file : g_vpk_files) {
+        // The map VPK would be named like de_mirage.vpk or in pak01_dir.vpk
+        // For now, check if the vpk contains the map
+        std::string vpk_name = std::filesystem::path(vpk_file).stem().string();
+        if (vpk_name == map_name || vpk_name == "pak01_dir") {
+            // We found a relevant VPK - now we'd need to extract world_physics.vphys
+            // This requires full VPK parsing which is complex
+            // For now, check if .vphys file already exists in the maps folder
+            std::string local_vphys = output_dir + "/" + map_name + ".vphys";
+            if (std::filesystem::exists(local_vphys)) {
+                vphys_path = local_vphys;
+                break;
+            }
+        }
+    }
+
+    // If no local .vphys, try to find in CS2 install
+    if (vphys_path.empty()) {
+        std::string cs2_vphys = g_cs2_install_path + "/game/csgo/maps/" + map_name + "/world_physics.vphys";
+        if (std::filesystem::exists(cs2_vphys)) {
+            vphys_path = cs2_vphys;
+        }
+    }
+
+    // If still no .vphys, check for .vphys_c (compressed)
+    if (vphys_path.empty()) {
+        std::string cs2_vphys_c = g_cs2_install_path + "/game/csgo/maps/" + map_name + "/world_physics.vphys_c";
+        if (std::filesystem::exists(cs2_vphys_c)) {
+            LOGF(INFO, "[map_extractor] Found compressed .vphys_c for {}, need decompression", map_name);
+            result.success = false;
+            result.error = "Found compressed .vphys_c - decompression not implemented. Use Source 2 Viewer to extract.";
+            return result;
+        }
+    }
+
+    if (!vphys_path.empty()) {
+        LOGF(INFO, "[map_extractor] Parsing .vphys for {}: {}", map_name, vphys_path);
+        
+        try {
+            // Use VisCheckCS2 parser to parse .vphys
+            Parser parser(vphys_path);
+            auto combined = parser.GetCombinedList();
+            
+            // Save as .tri format (compatible with MapRaytrace - just array of Triangle {Vec3 p1,p2,p3})
+            std::string tri_path = output_dir + "/" + map_name + ".tri";
+            std::ofstream out(tri_path, std::ios::binary);
+            if (!out) {
+                result.success = false;
+                result.error = "Failed to open output .tri file";
+                return result;
+            }
+
+            // MapRaytrace expects: array of Triangle { Vec3 p1, p2, p3 } (36 bytes each)
+            // No header, just raw triangles
+            size_t total_tris = 0;
+            for (const auto& mesh : combined) {
+                total_tris += mesh.size();
+            }
+
+            for (const auto& mesh : combined) {
+                for (const auto& tri : mesh) {
+                    out.write(reinterpret_cast<const char*>(&tri.v0), sizeof(Vector3));
+                    out.write(reinterpret_cast<const char*>(&tri.v1), sizeof(Vector3));
+                    out.write(reinterpret_cast<const char*>(&tri.v2), sizeof(Vector3));
+                }
+            }
+            out.close();
+
+            LOGF(INFO, "[map_extractor] Saved {} triangles to {}", total_tris, tri_path);
+            result.success = true;
+            result.tri_path = tri_path;
+            return result;
+        }
+        catch (const std::exception& e) {
+            result.success = false;
+            result.error = std::string("Parser error: ") + e.what();
+            return result;
+        }
+    }
+
     result.success = false;
-    result.error = "Native VPK extraction not yet implemented. "
-                   "Place .tri files manually in maps/ folder, "
-                   "or use cs2-phys-extractor (C#) to extract from VPKs.";
-    
-    // TODO: Implement native VPK + vmdl_c extraction:
-    // 1. Find map VPK (de_mirage.vpk or pak01_dir.vpk)
-    // 2. Extract maps/de_mirage/world_physics.vmdl_c
-    // 3. Parse KV3 to get physics mesh data
-    // 4. Convert to .tri format (Triangle {Vec3 p1,p2,p3})
-    // 5. Save to output_dir/map_name.tri
-    
+    result.error = "No .vphys file found for map. Extract using Source 2 Viewer or cs2-phys-extractor.";
     return result;
 }
 

@@ -13,6 +13,9 @@ find_package(OpenGL REQUIRED)
 find_package(X11 REQUIRED)
 find_package(glfw3 3.4 REQUIRED)
 
+# VisCheckCS2 for map collision parsing
+add_subdirectory(src/external/VisCheckCS2)
+
 file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 list(FILTER APP_SOURCES EXCLUDE REGEX "/external/")
 list(REMOVE_ITEM APP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/gui/renderer/window/Window.cpp")
@@ -35,7 +38,8 @@ target_compile_definitions(sourcesight PRIVATE _GNU_SOURCE)
 target_compile_options(sourcesight PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(sourcesight PRIVATE src src/external src/external/imgui
     src/external/json/include
-    src/external/AsyncLogger/src src/external/AsyncLogger/include/AsyncLogger)
+    src/external/AsyncLogger/src src/external/AsyncLogger/include/AsyncLogger
+    src/external/VisCheckCS2/VisCheckCS2)
 target_precompile_headers(sourcesight PRIVATE src/common.hpp)
-target_link_libraries(sourcesight PRIVATE CURL::libcurl OpenGL::GL glfw X11::X11 X11::Xext X11::Xtst X11::Xi pthread)
+target_link_libraries(sourcesight PRIVATE CURL::libcurl OpenGL::GL glfw X11::X11 X11::Xext X11::Xtst X11::Xi pthread VisCheckCS2)
 install(TARGETS sourcesight RUNTIME DESTINATION bin)
