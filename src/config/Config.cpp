@@ -227,6 +227,10 @@ bool Config::ReadImpl(const std::string& path) {
 			cfg::esp::bullet_tracer::enemy = JsonToColor(bt, "enemy", { 1.f, 0.3f, 0.3f, 0.6f });
 		}
 		
+		// wireframe
+		cfg::esp::wireframe = data["esp"].value("wireframe", false);
+		cfg::esp::wireframe_max_dist = data["esp"].value("wireframe_max_dist", 3000.0f);
+		
 		// flags
 		cfg::esp::flags::name = data["esp"]["flags"].value("name", true);
 		cfg::esp::flags::ping = data["esp"]["flags"].value("ping", false);
@@ -475,6 +479,10 @@ bool Config::WriteImpl(const std::string& path) {
 	ColorToJson(data["esp"]["bullet_tracer"], "team", cfg::esp::bullet_tracer::team);
 	ColorToJson(data["esp"]["bullet_tracer"], "enemy", cfg::esp::bullet_tracer::enemy);
 
+	// wireframe
+	data["esp"]["wireframe"] = cfg::esp::wireframe;
+	data["esp"]["wireframe_max_dist"] = cfg::esp::wireframe_max_dist;
+	
 	// flags
 	data["esp"]["flags"]["name"] = cfg::esp::flags::name;
 	data["esp"]["flags"]["ping"] = cfg::esp::flags::ping;

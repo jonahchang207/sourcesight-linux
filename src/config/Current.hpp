@@ -37,6 +37,10 @@ namespace cfg {
 			inline color_t team{ 0.f, 1.f, 0.5f, 0.6f };
 			inline color_t enemy{ 1.f, 0.3f, 0.3f, 0.6f };
 		}
+
+		// Debug wireframe of map collision geometry
+		inline bool wireframe = false;
+		inline float wireframe_max_dist = 3000.0f;
 		
 		inline bool bomb = true;
 

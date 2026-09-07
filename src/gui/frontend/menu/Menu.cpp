@@ -482,6 +482,15 @@ void Menu::RenderImpl() {
                                 ImGui::SliderFloat("Bullet thickness", &cfg::esp::bullet_tracer::thickness, 1.0f, 4.0f, "%.1f");
                             }
                             ImGui::EndDisabled();
+
+                            ImGui::Spacing();
+                            ImGui::Checkbox("Wireframe Map", &cfg::esp::wireframe);
+                            ImGui::SetItemTooltip("Draw wireframe of map collision geometry (requires .tri file loaded).");
+                            ImGui::BeginDisabled(!cfg::esp::wireframe);
+                            {
+                                ImGui::SliderFloat("Max distance", &cfg::esp::wireframe_max_dist, 500.0f, 10000.0f, "%.0f u");
+                            }
+                            ImGui::EndDisabled();
                         }
                         ImGui::EndGroup();
 

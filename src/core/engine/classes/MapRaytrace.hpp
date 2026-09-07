@@ -67,4 +67,10 @@ const std::string& CurrentMap();
 // True when a valid map is loaded and ready for raycasting.
 bool IsReady();
 
+// Debug: Get all triangles for wireframe rendering (call from render thread only).
+const std::vector<Triangle>& GetTriangles();
+
+// Debug: Render wireframe of collision mesh.
+void RenderWireframe(view_matrix_t& matrix, const ImGuiIO& io, ImDrawList* d, const Vec3_t& camera_pos);
+
 } // namespace MapRaytrace

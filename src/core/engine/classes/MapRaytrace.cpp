@@ -354,3 +354,57 @@ const std::string& MapRaytrace::CurrentMap() {
 bool MapRaytrace::IsReady() {
     return g_ready;
 }
+
+const std::vector<MapRaytrace::Triangle>& MapRaytrace::GetTriangles() {
+    return g_triangles;
+}
+
+void MapRaytrace::RenderWireframe(view_matrix_t& matrix, const ImGuiIO& io, ImDrawList* d, const Vec3_t& camera_pos) {
+    if (!g_ready || g_triangles.empty())
+        return;
+
+    // Render triangles as wireframe
+    // Only render triangles in front of camera and within reasonable distance
+    const float max_dist = 5000.0f;
+    
+    for (const auto& tri : g_triangles) {
+        // Quick frustum check: test triangle center
+        Vec3_t center = { (tri.p1.x + tri.p2.x + tri.p3.x) / 3.0f,
+                          (tri.p1.y + tri.p2.y + tri.p3.y) / 3.0f,
+                          (tri.p1.z + tri.p2.z + tri.p3.z) / 3.0f };
+        
+        Vec3_t cam_to_tri = { center.x - camera_pos.x, center.y - camera_pos.y, center.z - camera_pos.z };
+        float dist = std::sqrt(cam_to_tri.x * cam_to_tri.x + cam_to_tri.y * cam_to_tri.y + cam_to_tri.z * cam_to_tri.z);
+        if (dist > max_dist)
+            continue;
+        
+        // Check if in front of camera
+        Vec3_t view_dir;
+        view_dir.x = matrix[0][0] * cam_to_tri.x + matrix[0][1] * cam_to_tri.y + matrix[0][2] * cam_to_tri.z;
+        view_dir.y = matrix[1][0] * cam_to_tri.x + matrix[1][1] * cam_to_tri.y + matrix[1][2] * cam_to_tri.z;
+        view_dir.z = matrix[2][0] * cam_to_tri.x + matrix[2][1] * cam_to_tri.y + matrix[2][2] * cam_to_tri.z;
+        
+        if (view_dir.z <= 0.0f)
+            continue;
+        
+        // Project triangle vertices (convert MapRaytrace::Vec3 to Vec3_t)
+        Vec3_t v1 = { tri.p1.x, tri.p1.y, tri.p1.z };
+        Vec3_t v2 = { tri.p2.x, tri.p2.y, tri.p2.z };
+        Vec3_t v3 = { tri.p3.x, tri.p3.y, tri.p3.z };
+        
+        Vec2_t p1, p2, p3;
+        bool b1 = matrix.wts(v1, io.DisplaySize, p1);
+        bool b2 = matrix.wts(v2, io.DisplaySize, p2);
+        bool b3 = matrix.wts(v3, io.DisplaySize, p3);
+        
+        if (b1 && b2 && b3) {
+            // Color based on distance (closer = brighter)
+            float alpha = std::clamp(1.0f - dist / max_dist, 0.1f, 1.0f);
+            ImU32 color = IM_COL32(0, (int)(255 * alpha), (int)(255 * alpha), (int)(200 * alpha));
+            
+            d->AddLine(p1, p2, color, 0.5f);
+            d->AddLine(p2, p3, color, 0.5f);
+            d->AddLine(p3, p1, color, 0.5f);
+        }
+    }
+}

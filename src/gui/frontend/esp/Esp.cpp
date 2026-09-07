@@ -2,6 +2,7 @@
 #include "SoundEsp.hpp"
 
 #include "core/input/MouseAim.hpp"
+#include "core/engine/classes/MapRaytrace.hpp"
 #include "gui/renderer/Renderer.hpp"
 #include "assets/fonts/WeaponIcons.h"
 #include "assets/fonts/Icons.h"
@@ -215,6 +216,11 @@ void Esp::RenderImpl() {
 	// Update and render sound ESP (footsteps, gunshots)
 	SoundEsp::Update(players, local);
 	SoundEsp::Render(this->matrix, this->io, this->d, local);
+
+	// Render map collision wireframe (debug)
+	if (cfg::esp::wireframe && MapRaytrace::IsReady()) {
+		MapRaytrace::RenderWireframe(this->matrix, this->io, this->d, local.pos);
+	}
 
 	RenderCrosshair(local);
 	RenderBombBox(bomb);
