@@ -1052,11 +1052,13 @@ void Menu::RenderImpl() {
                     ImGui::TextColored(kAccent, "Sound ESP");
                     ImGui::Separator();
 
+                    // Enable checkbox outside the section so it's always clickable
+                    ImGui::Checkbox("Enable Sound ESP", &cfg::sound_esp::enabled);
+                    ImGui::Spacing();
+
                     if (BeginGlassSection("Sound ESP", cfg::sound_esp::enabled)) {
                         ImGui::BeginGroup();
                         {
-                            ImGui::Checkbox("Enable", &cfg::sound_esp::enabled);
-                            ImGui::Spacing();
                             ImGui::Checkbox("Footsteps", &cfg::sound_esp::footsteps);
                             ImGui::BeginDisabled(!cfg::sound_esp::footsteps);
                             {
