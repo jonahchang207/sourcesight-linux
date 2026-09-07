@@ -239,6 +239,19 @@ namespace cfg {
 		inline bool lock_sound = false;        // Play a sound on target lock
 	}
 
+	// Sound ESP (footsteps, gunshots, etc.)
+	namespace sound_esp {
+		inline bool enabled = false;
+		inline bool footsteps = true;
+		inline bool gunshots = true;
+		inline float max_distance = 1000.0f;
+		inline float duration = 3.0f;
+		inline float fade_time = 1.0f;
+		inline float footprint_size = 8.0f;
+		inline color_t footsteps_color{ 1.f, 1.f, 1.f, 0.8f };
+		inline color_t gunshots_color{ 1.f, 0.3f, 0.3f, 0.9f };
+	}
+
 	// Not stored, just for testing
 	namespace dev {
 		inline bool console = true;

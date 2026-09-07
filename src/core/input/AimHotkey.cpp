@@ -4,6 +4,7 @@
 
 #include <X11/Xlib.h>
 #include <X11/extensions/XInput2.h>
+#include <X11/extensions/XI.h> // INAME ("XInputExtension") for XQueryExtension
 
 #include <linux/input.h>
 #include <sys/ioctl.h>
@@ -146,8 +147,19 @@ void AimHotkey::X11Loop() {
     }
 
     int opcode = 0, event_base = 0, error_base = 0;
-    if (!XQueryExtension(dpy, "XINPUT", &opcode, &event_base, &error_base)) {
+    // The XInput2 extension is registered as "XInputExtension" (INAME in
+    // XI.h), not "XINPUT".  A wrong name makes XQueryExtension silently fail
+    // even on servers (like Xwayland) where XInput2 raw events work fine.
+    if (!XQueryExtension(dpy, INAME, &opcode, &event_base, &error_base)) {
         LOGF(WARNING, "[aim][hotkey] XInput2 extension not available; MB5 via X11 disabled");
+        XCloseDisplay(dpy);
+        return;
+    }
+
+    // Older XI1-only servers expose the extension but no XI2 raw events.
+    int major = XI_2_Major, minor = XI_2_Minor;
+    if (XIQueryVersion(dpy, &major, &minor) != Success) {
+        LOGF(WARNING, "[aim][hotkey] XInput2 version unsupported (got {}.{}); MB5 via X11 disabled", major, minor);
         XCloseDisplay(dpy);
         return;
     }

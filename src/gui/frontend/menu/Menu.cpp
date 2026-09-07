@@ -1047,6 +1047,44 @@ void Menu::RenderImpl() {
                         EndGlassSection(true);
                     }
                 }
+                else if (active_tab == Tab::SOUND_ESP)
+                {
+                    ImGui::TextColored(kAccent, "Sound ESP");
+                    ImGui::Separator();
+
+                    if (BeginGlassSection("Sound ESP", cfg::sound_esp::enabled)) {
+                        ImGui::BeginGroup();
+                        {
+                            ImGui::Checkbox("Enable", &cfg::sound_esp::enabled);
+                            ImGui::Spacing();
+                            ImGui::Checkbox("Footsteps", &cfg::sound_esp::footsteps);
+                            ImGui::BeginDisabled(!cfg::sound_esp::footsteps);
+                            {
+                                ImGui::SameLine();
+                                ImGui::ColorEdit4("Footsteps color", cfg::sound_esp::footsteps_color.data(), color_flags);
+                            }
+                            ImGui::EndDisabled();
+
+                            ImGui::Checkbox("Gunshots", &cfg::sound_esp::gunshots);
+                            ImGui::BeginDisabled(!cfg::sound_esp::gunshots);
+                            {
+                                ImGui::SameLine();
+                                ImGui::ColorEdit4("Gunshots color", cfg::sound_esp::gunshots_color.data(), color_flags);
+                            }
+                            ImGui::EndDisabled();
+
+                            ImGui::SliderFloat("Max distance", &cfg::sound_esp::max_distance, 100.0f, 5000.0f, "%.0f u");
+                            ImGui::SliderFloat("Duration", &cfg::sound_esp::duration, 0.5f, 10.0f, "%.1f s");
+                            ImGui::SliderFloat("Fade time", &cfg::sound_esp::fade_time, 0.1f, 5.0f, "%.1f s");
+                            ImGui::SliderFloat("Footprint size", &cfg::sound_esp::footprint_size, 2.0f, 32.0f, "%.1f");
+                        }
+                        ImGui::EndGroup();
+                        EndGlassSection(true, cfg::sound_esp::enabled);
+                    }
+
+                    ImGui::Spacing();
+                    ImGui::TextWrapped("Visualizes enemy footsteps and gunshots on screen. Footsteps are detected from player velocity/position changes. Gunshots use the bullet tracer system to detect when enemies fire.");
+                }
                 else if (active_tab == Tab::SETTINGS)
                 {
                     ImGui::TextColored(kAccent, "Settings");

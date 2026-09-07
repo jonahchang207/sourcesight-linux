@@ -1,4 +1,5 @@
 #include "Esp.hpp"
+#include "SoundEsp.hpp"
 
 #include "core/input/MouseAim.hpp"
 #include "gui/renderer/Renderer.hpp"
@@ -210,6 +211,10 @@ void Esp::RenderImpl() {
 		RenderPlayer(player, mate);
 		RenderBulletTracers(player, players, mate);
 	}
+
+	// Update and render sound ESP (footsteps, gunshots)
+	SoundEsp::Update(players, local);
+	SoundEsp::Render(this->matrix, this->io, this->d, local);
 
 	RenderCrosshair(local);
 	RenderBombBox(bomb);
@@ -776,6 +781,9 @@ void Esp::RenderBulletTracers(Player player, const std::vector<Player>& players,
 		if (tracers.size() >= 256)
 			tracers.erase(tracers.begin());
 		tracers.push_back({ origin, end, now, mate, player.localplayer });
+
+		// Add gunshot sound event for sound ESP
+		SoundEsp::AddGunshot(origin, !mate);
 	}
 
 	// Render and expire active tracers, fading only in the final moments.

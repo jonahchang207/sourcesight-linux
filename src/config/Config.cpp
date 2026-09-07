@@ -399,6 +399,20 @@ bool Config::ReadImpl(const std::string& path) {
 			cfg::audio::lock_sound = data["audio"].value("lock_sound", false);
 		}
 
+		// sound_esp
+		if (data.contains("sound_esp")) {
+			const auto& se = data["sound_esp"];
+			cfg::sound_esp::enabled = se.value("enabled", false);
+			cfg::sound_esp::footsteps = se.value("footsteps", true);
+			cfg::sound_esp::gunshots = se.value("gunshots", true);
+			cfg::sound_esp::max_distance = se.value("max_distance", 1000.0f);
+			cfg::sound_esp::duration = se.value("duration", 3.0f);
+			cfg::sound_esp::fade_time = se.value("fade_time", 1.0f);
+			cfg::sound_esp::footprint_size = se.value("footprint_size", 8.0f);
+			cfg::sound_esp::footsteps_color = JsonToColor(se, "footsteps_color", { 1.f, 1.f, 1.f, 0.8f });
+			cfg::sound_esp::gunshots_color = JsonToColor(se, "gunshots_color", { 1.f, 0.3f, 0.3f, 0.9f });
+		}
+
 		// skins — load active skin overrides
 		if (data.contains("skins") && data["skins"].is_object()) {
 			for (auto& [key, val] : data["skins"].items()) {
@@ -614,6 +628,17 @@ bool Config::WriteImpl(const std::string& path) {
 
 	// audio
 	data["audio"]["lock_sound"] = cfg::audio::lock_sound;
+
+	// sound_esp
+	data["sound_esp"]["enabled"] = cfg::sound_esp::enabled;
+	data["sound_esp"]["footsteps"] = cfg::sound_esp::footsteps;
+	data["sound_esp"]["gunshots"] = cfg::sound_esp::gunshots;
+	data["sound_esp"]["max_distance"] = cfg::sound_esp::max_distance;
+	data["sound_esp"]["duration"] = cfg::sound_esp::duration;
+	data["sound_esp"]["fade_time"] = cfg::sound_esp::fade_time;
+	data["sound_esp"]["footprint_size"] = cfg::sound_esp::footprint_size;
+	ColorToJson(data["sound_esp"], "footsteps_color", cfg::sound_esp::footsteps_color);
+	ColorToJson(data["sound_esp"], "gunshots_color", cfg::sound_esp::gunshots_color);
 
 	// skins — save all active skin overrides
 	{
