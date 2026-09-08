@@ -3,7 +3,6 @@
 #include "core/offsets/Dumper.hpp"
 #include "core/engine/cache/Cache.hpp"
 #include "core/engine/classes/Macro.hpp"
-#include "core/engine/classes/SkinChanger.hpp"
 #include "core/engine/classes/MapRaytrace.hpp"
 #include "core/engine/classes/MapExtractor.hpp"
 #include "core/input/MouseAim.hpp"
@@ -68,7 +67,6 @@ void Engine::Thread() {
 		Macro::Update();
 		MouseAim::Update();
 		Spinbot::Update();
-		SkinChanger::Run();
 		Triggerbot::Update();
 		Triggerbot::UpdateAimLink();
 

@@ -10,3 +10,6 @@
 [submodule "src/external/curl"]
 	path = src/external/curl
 	url = https://github.com/curl/curl
+[submodule "src/external/VisCheckCS2"]
+	path = src/external/VisCheckCS2
+	url = https://github.com/Read1dno/VisCheckCS2.git

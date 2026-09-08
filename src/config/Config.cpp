@@ -1,6 +1,4 @@
 #include "Config.hpp"
-#include "core/engine/classes/SkinChanger.hpp"
-#include "core/engine/classes/SkinDatabase.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -230,6 +228,9 @@ bool Config::ReadImpl(const std::string& path) {
 		// wireframe
 		cfg::esp::wireframe = data["esp"].value("wireframe", false);
 		cfg::esp::wireframe_max_dist = data["esp"].value("wireframe_max_dist", 3000.0f);
+		cfg::esp::wireframe_budget = std::clamp(data["esp"].value("wireframe_budget", 6000), 500, 8000);
+		cfg::esp::wireframe_opacity = std::clamp(data["esp"].value("wireframe_opacity", 0.65f), 0.0f, 1.0f);
+		cfg::esp::wireframe_color = JsonToColor(data["esp"], "wireframe_color", {100.f/255.f, 215.f/255.f, 220.f/255.f, 1.f});
 		
 		// flags
 		cfg::esp::flags::name = data["esp"]["flags"].value("name", true);
@@ -304,6 +305,7 @@ bool Config::ReadImpl(const std::string& path) {
 
 		// radar
 		cfg::world::radar::enabled = data["world"]["radar"].value("enabled", true);
+		cfg::world::radar::opacity = std::clamp(data["world"]["radar"].value("opacity", 0.20f), 0.0f, 1.0f);
 		cfg::world::radar::no_rotate = data["world"]["radar"].value("no_rotate", false);
 		cfg::world::radar::range = data["world"]["radar"].value("range", 2000.f);
 		cfg::world::radar::pos = JsonToVec2(data["world"]["radar"], "pos", { 10.f, 10.f });
@@ -417,18 +419,6 @@ bool Config::ReadImpl(const std::string& path) {
 			cfg::sound_esp::gunshots_color = JsonToColor(se, "gunshots_color", { 1.f, 0.3f, 0.3f, 0.9f });
 		}
 
-		// skins — load active skin overrides
-		if (data.contains("skins") && data["skins"].is_object()) {
-			for (auto& [key, val] : data["skins"].items()) {
-				int weapon_id = std::stoi(key);
-				auto& skin = SkinChanger::Get(weapon_id);
-				skin.paint_kit = val.value("paint_kit", 0);
-				skin.wear = val.value("wear", 0.0f);
-				skin.seed = val.value("seed", 0);
-				skin.stattrak = val.value("stattrak", -1);
-			}
-			SkinChanger::ForceUpdate();
-		}
 	}
 	catch (const std::exception& e) {
 		LOGF(WARNING, "Invalid configuration value ({}); restoring defaults", e.what());
@@ -482,6 +472,9 @@ bool Config::WriteImpl(const std::string& path) {
 	// wireframe
 	data["esp"]["wireframe"] = cfg::esp::wireframe;
 	data["esp"]["wireframe_max_dist"] = cfg::esp::wireframe_max_dist;
+	data["esp"]["wireframe_budget"] = cfg::esp::wireframe_budget;
+	data["esp"]["wireframe_opacity"] = cfg::esp::wireframe_opacity;
+	ColorToJson(data["esp"], "wireframe_color", cfg::esp::wireframe_color);
 	
 	// flags
 	data["esp"]["flags"]["name"] = cfg::esp::flags::name;
@@ -521,6 +514,7 @@ bool Config::WriteImpl(const std::string& path) {
 
 	// radar
 	data["world"]["radar"]["enabled"] = cfg::world::radar::enabled;
+	data["world"]["radar"]["opacity"] = cfg::world::radar::opacity;
 	data["world"]["radar"]["no_rotate"] = cfg::world::radar::no_rotate;
 	data["world"]["radar"]["range"] = cfg::world::radar::range;
 	Vec2ToJson(data["world"]["radar"], "pos", cfg::world::radar::pos);
@@ -647,21 +641,6 @@ bool Config::WriteImpl(const std::string& path) {
 	data["sound_esp"]["footprint_size"] = cfg::sound_esp::footprint_size;
 	ColorToJson(data["sound_esp"], "footsteps_color", cfg::sound_esp::footsteps_color);
 	ColorToJson(data["sound_esp"], "gunshots_color", cfg::sound_esp::gunshots_color);
-
-	// skins — save all active skin overrides
-	{
-		json skins_obj = json::object();
-		for (const auto& [id, skin] : SkinChanger::GetAll()) {
-			if (skin.paint_kit <= 0) continue;
-			json s;
-			s["paint_kit"] = skin.paint_kit;
-			s["wear"] = skin.wear;
-			s["seed"] = skin.seed;
-			s["stattrak"] = skin.stattrak;
-			skins_obj[std::to_string(id)] = s;
-		}
-		data["skins"] = skins_obj;
-	}
 
 	f << std::setw(4) << data << std::endl;
 	f.close();

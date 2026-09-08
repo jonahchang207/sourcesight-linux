@@ -1,12 +1,11 @@
 #pragma once
-#include "assets/fonts/Icons.h"
+#include <string>
 
 enum Tab {
     PLAYER,
     WORLD,
     AIM,
     TRIGGERBOT,
-    SKINS,
     MACRO,
     SOUND_ESP,
     SETTINGS
@@ -16,19 +15,17 @@ struct TabItem
 {
     Tab id;
     std::string label;
-    std::string icon;
 };
 
 static const TabItem tabs[] =
 {
-    { Tab::PLAYER,      "Player",      Icons::PERSON },
-    { Tab::WORLD,       "World",       Icons::GLOBE },
-    { Tab::AIM,         "Aim",         Icons::RELOAD },
-    { Tab::TRIGGERBOT,  "Trigger",     Icons::RELOAD },
-    { Tab::SKINS,       "Skins",       Icons::RELOAD },
-    { Tab::MACRO,       "Macro",       Icons::RELOAD },
-    { Tab::SOUND_ESP,   "Sound ESP",   Icons::GITHUB },
-    { Tab::SETTINGS,    "Settings",    Icons::SETTINGS }
+    { Tab::PLAYER,     "Player" },
+    { Tab::WORLD,      "World" },
+    { Tab::AIM,        "Aim" },
+    { Tab::TRIGGERBOT, "Trigger" },
+    { Tab::MACRO,      "Macro" },
+    { Tab::SOUND_ESP,  "Sound ESP" },
+    { Tab::SETTINGS,   "Settings" }
 };
 
 class Menu {
@@ -66,5 +63,5 @@ private:
     ImVec2 pos;
     ImVec2 size;
 
-    ImFont* font_icons;
+    ImFont* font_heading = nullptr;
 };

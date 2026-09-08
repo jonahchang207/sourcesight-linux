@@ -2,7 +2,7 @@
 #include <imgui.h>
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SourceSight "Sapphire Glass" design language.
+// SourceSight "Graphite" design language.
 //
 // Single source of truth for the menu palette and the low-level drawing
 // helpers that give panels their frosted-glass identity. Everything in the
@@ -20,27 +20,27 @@
 namespace theme {
 
 // ── Sapphire surface ramp (0..1 normalized) ──────────────────────────────
-inline constexpr ImVec4 kSurfaceBase   = ImVec4(0.055f, 0.080f, 0.160f, 0.86f); // inputs, frames
-inline constexpr ImVec4 kSurfaceElev1  = ImVec4(0.090f, 0.150f, 0.290f, 0.62f); // panels, sidebar
-inline constexpr ImVec4 kSurfaceElev2  = ImVec4(0.110f, 0.190f, 0.360f, 0.55f); // raised glass
-inline constexpr ImVec4 kSurfaceDeep   = ImVec4(0.047f, 0.075f, 0.150f, 0.94f); // window base
+inline constexpr ImVec4 kSurfaceBase   = ImVec4(.22f,.24f,.25f,1); // inputs, frames
+inline constexpr ImVec4 kSurfaceElev1  = ImVec4(.17f,.18f,.19f,1); // cards, rail
+inline constexpr ImVec4 kSurfaceElev2  = ImVec4(.21f,.23f,.24f,1); // raised cards
+inline constexpr ImVec4 kSurfaceDeep   = ImVec4(.12f,.13f,.14f,1); // window base
 
 // ── Borders ──────────────────────────────────────────────────────────────
-inline constexpr ImVec4 kBorderBase    = ImVec4(0.450f, 0.600f, 0.920f, 0.20f);
-inline constexpr ImVec4 kBorderStrong  = ImVec4(0.620f, 0.760f, 1.000f, 0.38f);
+inline constexpr ImVec4 kBorderBase    = ImVec4(.42f,.46f,.44f,.60f);
+inline constexpr ImVec4 kBorderStrong  = ImVec4(0.46f, 0.52f, 0.64f, 1.00f);
 
 // ── Royal sapphire accent ramp ───────────────────────────────────────────
-inline constexpr ImVec4 kAccent        = ImVec4(0.290f, 0.560f, 1.000f, 1.00f);
-inline constexpr ImVec4 kAccentBright  = ImVec4(0.520f, 0.720f, 1.000f, 1.00f);
-inline constexpr ImVec4 kAccentDim     = ImVec4(0.130f, 0.260f, 0.550f, 0.88f);
-inline constexpr ImVec4 kAccentSoft    = ImVec4(0.200f, 0.400f, 0.820f, 0.95f); // primary CTA
-inline constexpr ImVec4 kAccentStrong  = ImVec4(0.100f, 0.200f, 0.440f, 1.00f); // pressed CTA
-inline constexpr ImVec4 kAccentGlow    = ImVec4(0.290f, 0.560f, 1.000f, 0.16f);
+inline constexpr ImVec4 kAccent        = ImVec4(0.18f, 0.43f, 0.82f, 1.00f);
+inline constexpr ImVec4 kAccentBright  = ImVec4(0.27f, 0.56f, 0.95f, 1.00f);
+inline constexpr ImVec4 kAccentDim     = ImVec4(0.49f, 0.64f, 0.86f, 0.66f);
+inline constexpr ImVec4 kAccentSoft    = ImVec4(0.42f, 0.60f, 0.90f, 0.82f); // primary CTA
+inline constexpr ImVec4 kAccentStrong  = ImVec4(0.20f, 0.36f, 0.68f, 1.00f); // pressed CTA
+inline constexpr ImVec4 kAccentGlow    = ImVec4(0.27f, 0.56f, 1.00f, 0.16f);
 
 // ── Text ─────────────────────────────────────────────────────────────────
-inline constexpr ImVec4 kTextPrimary   = ImVec4(0.930f, 0.960f, 1.000f, 1.00f);
-inline constexpr ImVec4 kTextSecondary = ImVec4(0.660f, 0.740f, 0.920f, 1.00f);
-inline constexpr ImVec4 kTextMuted     = ImVec4(0.450f, 0.530f, 0.720f, 1.00f);
+inline constexpr ImVec4 kTextPrimary   = ImVec4(.91f,.93f,.92f,1);
+inline constexpr ImVec4 kTextSecondary = ImVec4(.73f,.77f,.74f,1);
+inline constexpr ImVec4 kTextMuted     = ImVec4(.64f,.68f,.66f,1);
 
 // ── Semantic signals ─────────────────────────────────────────────────────
 inline constexpr ImVec4 kSignalOK      = ImVec4(0.310f, 0.800f, 0.600f, 1.00f);
@@ -67,14 +67,8 @@ inline void DrawBackdrop(ImDrawList* d, const ImVec2& p, const ImVec2& s, float 
     d->AddRectFilled(p, ImVec2(p.x + s.x, p.y + s.y), Pack(kSurfaceDeep), r);
     d->PushClipRect(p, ImVec2(p.x + s.x, p.y + s.y), true);
     const float w = s.x, h = s.y;
-    d->AddCircleFilled(ImVec2(p.x + w * 0.20f, p.y + h * 0.12f), w * 0.60f,
-                       Pack(ImVec4(0.16f, 0.30f, 0.66f, 0.12f)));
-    d->AddCircleFilled(ImVec2(p.x + w * 0.88f, p.y + h * 0.16f), w * 0.46f,
-                       Pack(ImVec4(0.11f, 0.22f, 0.52f, 0.10f)));
-    d->AddCircleFilled(ImVec2(p.x + w * 0.70f, p.y + h * 0.95f), w * 0.55f,
-                       Pack(ImVec4(0.07f, 0.13f, 0.30f, 0.12f)));
-    d->AddCircleFilled(ImVec2(p.x + w * 1.02f, p.y + h * 0.52f), w * 0.34f,
-                       Pack(ImVec4(0.28f, 0.20f, 0.44f, 0.07f)));
+    d->AddRectFilled(ImVec2(p.x, p.y), ImVec2(p.x + w, p.y + h),
+                     Pack(ImVec4(.12f,.13f,.14f,1)), r);
     d->PopClipRect();
     d->AddRect(p, ImVec2(p.x + s.x, p.y + s.y),
                Pack(WithAlpha(kBorderBase, 0.55f)), r, 0, 1.0f);

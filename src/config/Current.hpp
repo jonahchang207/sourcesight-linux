@@ -41,6 +41,9 @@ namespace cfg {
 		// Debug wireframe of map collision geometry
 		inline bool wireframe = false;
 		inline float wireframe_max_dist = 3000.0f;
+		inline int wireframe_budget = 6000;
+		inline float wireframe_opacity = 0.65f;
+		inline color_t wireframe_color{ 100.f / 255.f, 215.f / 255.f, 220.f / 255.f, 1.f };
 		
 		inline bool bomb = true;
 
@@ -122,6 +125,7 @@ namespace cfg {
 
 		namespace radar {
 			inline bool enabled = true;
+			inline float opacity = 0.20f;
 			inline bool no_rotate = false;
 			inline float range = 2000.f;
 			inline Vec2_t pos{ 10.f, 10.f };

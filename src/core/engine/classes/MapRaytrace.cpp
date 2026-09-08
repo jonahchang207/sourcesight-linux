@@ -1,5 +1,6 @@
 #include "MapRaytrace.hpp"
 #include "common.hpp"
+#include "config/Current.hpp"
 
 #include <fstream>
 #include <algorithm>
@@ -8,6 +9,11 @@
 #include <mutex>
 #include <filesystem>
 #include <chrono>
+#include <memory>
+#include <span>
+#include <numeric>
+#include <optional>
+#include <limits>
 
 namespace {
 
@@ -15,12 +21,18 @@ constexpr float EPSILON = 1e-6f;
 constexpr int   KD_LEAF_THRESHOLD = 8;
 constexpr int   KD_MAX_DEPTH = 24;
 
-std::string              g_map_folder = "maps";
-std::string              g_current_map;
-std::vector<MapRaytrace::Triangle> g_triangles;
-MapRaytrace::KDNode*     g_root = nullptr;
-std::mutex               g_mutex;
-std::atomic<bool>        g_ready{false};
+void FreeKDTree(MapRaytrace::KDNode* node);
+struct Geometry {
+    std::string name;
+    std::vector<MapRaytrace::Triangle> triangles;
+    MapRaytrace::KDNode* root = nullptr;
+    ~Geometry() { FreeKDTree(root); }
+};
+std::atomic<std::shared_ptr<const Geometry>> g_geometry;
+std::mutex g_publish_mutex;
+uint64_t g_generation = 0;
+std::string g_map_folder = "maps";
+std::optional<std::string> g_desired_map;
 
 // ── KD-tree helpers ──────────────────────────────────────────────────
 
@@ -47,7 +59,7 @@ MapRaytrace::AABB MergeBounds(const MapRaytrace::AABB& a, const MapRaytrace::AAB
 }
 
 MapRaytrace::AABB ComputeBoundsFromIndices(const std::vector<MapRaytrace::Triangle>& tris,
-                                            const std::vector<uint32_t>& indices) {
+                                            std::span<const uint32_t> indices) {
     MapRaytrace::AABB box = ComputeBounds(tris[indices[0]]);
     for (size_t i = 1; i < indices.size(); ++i) {
         box = MergeBounds(box, ComputeBounds(tris[indices[i]]));
@@ -56,13 +68,14 @@ MapRaytrace::AABB ComputeBoundsFromIndices(const std::vector<MapRaytrace::Triang
 }
 
 MapRaytrace::KDNode* BuildKDTree(const std::vector<MapRaytrace::Triangle>& tris,
-                                  std::vector<uint32_t>& indices, int depth) {
-    auto* node = new MapRaytrace::KDNode();
+                                  std::span<uint32_t> indices, int depth) {
+    auto owner = std::unique_ptr<MapRaytrace::KDNode, decltype(&FreeKDTree)>(new MapRaytrace::KDNode(), FreeKDTree);
+    auto* node = owner.get();
     node->bbox = ComputeBoundsFromIndices(tris, indices);
 
     if ((int)indices.size() <= KD_LEAF_THRESHOLD || depth >= KD_MAX_DEPTH) {
-        node->triangle_indices = indices;
-        return node;
+        node->triangle_indices.assign(indices.begin(), indices.end());
+        return owner.release();
     }
 
     // Split along the longest axis of the bounding box
@@ -91,12 +104,9 @@ MapRaytrace::KDNode* BuildKDTree(const std::vector<MapRaytrace::Triangle>& tris,
     size_t mid = indices.size() / 2;
     std::nth_element(indices.begin(), indices.begin() + mid, indices.end(), comparator);
 
-    std::vector<uint32_t> left(indices.begin(), indices.begin() + mid);
-    std::vector<uint32_t> right(indices.begin() + mid, indices.end());
-
-    node->left = BuildKDTree(tris, left, depth + 1);
-    node->right = BuildKDTree(tris, right, depth + 1);
-    return node;
+    node->left = BuildKDTree(tris, indices.first(mid), depth + 1);
+    node->right = BuildKDTree(tris, indices.subspan(mid), depth + 1);
+    return owner.release();
 }
 
 void FreeKDTree(MapRaytrace::KDNode* node) {
@@ -110,22 +120,23 @@ void FreeKDTree(MapRaytrace::KDNode* node) {
 
 bool RayAABBIntersect(const MapRaytrace::Vec3& origin, const MapRaytrace::Vec3& inv_dir,
                       const MapRaytrace::AABB& box, float& tmin, float& tmax) {
-    float t1 = (box.min.x - origin.x) * inv_dir.x;
-    float t2 = (box.max.x - origin.x) * inv_dir.x;
-    tmin = std::min(t1, t2);
-    tmax = std::max(t1, t2);
-
-    float t3 = (box.min.y - origin.y) * inv_dir.y;
-    float t4 = (box.max.y - origin.y) * inv_dir.y;
-    tmin = std::max(tmin, std::min(t3, t4));
-    tmax = std::min(tmax, std::max(t3, t4));
-
-    float t5 = (box.min.z - origin.z) * inv_dir.z;
-    float t6 = (box.max.z - origin.z) * inv_dir.z;
-    tmin = std::max(tmin, std::min(t5, t6));
-    tmax = std::min(tmax, std::max(t5, t6));
-
-    return tmax >= std::max(0.0f, tmin);
+    tmin = 0;
+    tmax = std::numeric_limits<float>::max();
+    const float o[] = {origin.x,origin.y,origin.z};
+    const float inv[] = {inv_dir.x,inv_dir.y,inv_dir.z};
+    const float low[] = {box.min.x,box.min.y,box.min.z};
+    const float high[] = {box.max.x,box.max.y,box.max.z};
+    for (int i=0;i<3;++i) {
+        if (std::abs(inv[i]) >= 1e29f) {
+            if (o[i]<low[i] || o[i]>high[i]) return false;
+            continue;
+        }
+        const float a=(low[i]-o[i])*inv[i], b=(high[i]-o[i])*inv[i];
+        tmin=std::max(tmin,std::min(a,b));
+        tmax=std::min(tmax,std::max(a,b));
+        if (tmin>tmax) return false;
+    }
+    return true;
 }
 
 // ── Möller-Trumbore ray-triangle intersection ────────────────────────
@@ -178,7 +189,7 @@ bool RayTriangleIntersect(const MapRaytrace::Vec3& origin, const MapRaytrace::Ve
 
 // ── KD-tree ray traversal ────────────────────────────────────────────
 
-bool TraverseKDTree(MapRaytrace::KDNode* node,
+bool TraverseKDTree(const std::vector<MapRaytrace::Triangle>& triangles, MapRaytrace::KDNode* node,
                     const MapRaytrace::Vec3& origin,
                     const MapRaytrace::Vec3& dir,
                     const MapRaytrace::Vec3& inv_dir,
@@ -197,7 +208,7 @@ bool TraverseKDTree(MapRaytrace::KDNode* node,
     if (!node->triangle_indices.empty()) {
         for (uint32_t idx : node->triangle_indices) {
             float t;
-            if (RayTriangleIntersect(origin, dir, g_triangles[idx], t)) {
+            if (RayTriangleIntersect(origin, dir, triangles[idx], t)) {
                 if (t < max_dist)
                     return true;  // blocked
             }
@@ -210,13 +221,13 @@ bool TraverseKDTree(MapRaytrace::KDNode* node,
     if (node->left && node->right) {
         // Determine which child is closer
         // (simple heuristic: just try both, the early-out handles the rest)
-        if (TraverseKDTree(node->left, origin, dir, inv_dir, max_dist))
+        if (TraverseKDTree(triangles, node->left, origin, dir, inv_dir, max_dist))
             return true;
-        return TraverseKDTree(node->right, origin, dir, inv_dir, max_dist);
+        return TraverseKDTree(triangles, node->right, origin, dir, inv_dir, max_dist);
     }
 
-    if (node->left)  return TraverseKDTree(node->left, origin, dir, inv_dir, max_dist);
-    if (node->right) return TraverseKDTree(node->right, origin, dir, inv_dir, max_dist);
+    if (node->left)  return TraverseKDTree(triangles, node->left, origin, dir, inv_dir, max_dist);
+    if (node->right) return TraverseKDTree(triangles, node->right, origin, dir, inv_dir, max_dist);
     return false;
 }
 
@@ -227,184 +238,199 @@ bool TraverseKDTree(MapRaytrace::KDNode* node,
 // ═══════════════════════════════════════════════════════════════════════
 
 void MapRaytrace::Init(const std::string& map_folder) {
+    std::lock_guard lock(g_publish_mutex);
     g_map_folder = map_folder;
-    std::filesystem::create_directories(g_map_folder);
-    LOGF(INFO, "[raytrace] init — map folder: {}", g_map_folder);
 }
 
 bool MapRaytrace::LoadMap(const std::string& map_name) {
-    std::lock_guard<std::mutex> lock(g_mutex);
-
-    if (map_name == g_current_map && g_ready)
-        return true;
-
-    // Free previous data
-    if (g_root) {
-        FreeKDTree(g_root);
-        g_root = nullptr;
-    }
-    g_triangles.clear();
-    g_ready = false;
-
-    if (map_name.empty())
+    if (map_name.empty() || map_name.find("..") != std::string::npos ||
+        map_name.find_first_of("/\\\\") != std::string::npos)
         return false;
-
-    // Try multiple path patterns
-    std::string path;
-    for (const auto& candidate : {
-        g_map_folder + "/" + map_name + ".tri",
-        g_map_folder + "/" + map_name + "/world_physics.tri",
-        map_name + ".tri",
-    }) {
-        if (std::filesystem::exists(candidate)) {
-            path = candidate;
-            break;
-        }
+    uint64_t generation;
+    std::string folder;
+    {
+        std::lock_guard lock(g_publish_mutex);
+        if (g_desired_map && *g_desired_map != map_name) return false;
+        auto current = g_geometry.load();
+        if (current && current->name == map_name) return true;
+        generation = ++g_generation;
+        g_geometry.store(nullptr);
+        folder = g_map_folder;
     }
-
-    if (path.empty()) {
-        LOGF(WARNING, "[raytrace] .tri file not found for map '{}' — searched in {}",
-             map_name, g_map_folder);
-        return false;
-    }
-
-    // Read triangle data
+    auto geometry = std::make_shared<Geometry>();
+    geometry->name = map_name;
     auto t0 = std::chrono::steady_clock::now();
-
-    std::ifstream in(path, std::ios::binary | std::ios::ate);
-    if (!in.is_open()) {
-        LOGF(WARNING, "[raytrace] failed to open {}", path);
+    std::vector<std::filesystem::path> candidates = {
+        std::filesystem::path(folder) / (map_name + ".tri"),
+        std::filesystem::path(folder) / map_name / "world_physics.tri",
+        map_name + ".tri"
+    };
+#ifndef _WIN32
+    std::error_code ec;
+    auto executable = std::filesystem::read_symlink("/proc/self/exe", ec);
+    if (!ec) {
+        candidates.push_back(executable.parent_path() / folder / (map_name + ".tri"));
+        candidates.push_back(executable.parent_path().parent_path() / folder / (map_name + ".tri"));
+    }
+#endif
+    std::ifstream in;
+    for (const auto& path : candidates) {
+        in.open(path, std::ios::binary | std::ios::ate);
+        if (in.is_open()) break;
+        in.clear();
+    }
+    if (!in.is_open()) return false;
+    const auto bytes = in.tellg();
+    static_assert(sizeof(Triangle) == 36);
+    if (bytes <= 0 || bytes > 512LL * 1024 * 1024 || bytes % sizeof(Triangle) != 0) {
+        LOGF(WARNING, "[raytrace] invalid mesh size for '{}'", map_name);
         return false;
     }
-
-    auto file_size = in.tellg();
-    if (file_size <= 0 || file_size % sizeof(Triangle) != 0) {
-        LOGF(WARNING, "[raytrace] invalid .tri file size: {} bytes", (long long)file_size);
-        return false;
-    }
-
-    size_t num_tris = file_size / sizeof(Triangle);
-    g_triangles.resize(num_tris);
+    geometry->triangles.resize(static_cast<size_t>(bytes) / sizeof(Triangle));
     in.seekg(0);
-    in.read(reinterpret_cast<char*>(g_triangles.data()), file_size);
-    in.close();
-
-    // Build KD-tree
-    std::vector<uint32_t> indices(num_tris);
-    for (uint32_t i = 0; i < num_tris; ++i) indices[i] = i;
-
-    g_root = BuildKDTree(g_triangles, indices, 0);
-
-    auto t1 = std::chrono::steady_clock::now();
-    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
-
-    g_current_map = map_name;
-    g_ready = true;
-
-    LOGF(INFO, "[raytrace] loaded '{}' — {} triangles, KD-tree built in {:.1f}ms",
-         map_name, num_tris, ms);
-
+    if (!in.read(reinterpret_cast<char*>(geometry->triangles.data()), bytes)) return false;
+    // Reject corrupt coordinates and discard zero-area triangles before partitioning.
+    auto valid = [](const Triangle& t) {
+        for (auto p : {t.p1,t.p2,t.p3})
+            if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z) ||
+                std::abs(p.x)>1e7f || std::abs(p.y)>1e7f || std::abs(p.z)>1e7f) return false;
+        const Vec3 a{t.p2.x-t.p1.x,t.p2.y-t.p1.y,t.p2.z-t.p1.z};
+        const Vec3 b{t.p3.x-t.p1.x,t.p3.y-t.p1.y,t.p3.z-t.p1.z};
+        const Vec3 c{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};
+        return c.x*c.x+c.y*c.y+c.z*c.z > EPSILON*EPSILON;
+    };
+    auto& triangles = geometry->triangles;
+    std::erase_if(triangles, [&](const Triangle& t){return !valid(t);});
+    if (triangles.empty()) return false;
+    std::vector<uint32_t> indices(triangles.size());
+    std::iota(indices.begin(), indices.end(), 0u);
+    geometry->root = BuildKDTree(triangles, indices, 0);
+    {
+        std::lock_guard lock(g_publish_mutex);
+        if (generation != g_generation) return false; // cancelled or superseded
+        g_geometry.store(geometry);
+    }
+    LOGF(INFO, "[raytrace] loaded '{}' — {} triangles in {:.1f}ms", map_name, triangles.size(),
+        std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count());
     return true;
 }
 
 void MapRaytrace::Unload() {
-    std::lock_guard<std::mutex> lock(g_mutex);
-    if (g_root) {
-        FreeKDTree(g_root);
-        g_root = nullptr;
-    }
-    g_triangles.clear();
-    g_current_map.clear();
-    g_ready = false;
-    LOGF(INFO, "[raytrace] unloaded");
+    std::lock_guard lock(g_publish_mutex);
+    ++g_generation;
+    g_geometry.store(nullptr);
+}
+
+void MapRaytrace::SetDesiredMap(const std::string& map_name) {
+    std::lock_guard lock(g_publish_mutex);
+    g_desired_map = map_name;
+    ++g_generation;
+    g_geometry.store(nullptr);
 }
 
 bool MapRaytrace::IsVisible(const Vec3& origin, const Vec3& target) {
-    if (!g_ready || !g_root)
-        return true;  // No map loaded — assume visible (don't block aim)
-
-    Vec3 dir;
-    dir.x = target.x - origin.x;
-    dir.y = target.y - origin.y;
-    dir.z = target.z - origin.z;
-
-    float length = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
-    if (length < 1.0f)
-        return true;
-
-    // Normalize direction
-    dir.x /= length;
-    dir.y /= length;
-    dir.z /= length;
-
-    // Precompute inverse direction for slab test (avoid div-by-zero)
-    Vec3 inv_dir;
-    inv_dir.x = (std::fabs(dir.x) < EPSILON) ? 1e30f : 1.0f / dir.x;
-    inv_dir.y = (std::fabs(dir.y) < EPSILON) ? 1e30f : 1.0f / dir.y;
-    inv_dir.z = (std::fabs(dir.z) < EPSILON) ? 1e30f : 1.0f / dir.z;
-
-    std::lock_guard<std::mutex> lock(g_mutex);
-    return !TraverseKDTree(g_root, origin, dir, inv_dir, length);
+    const auto geometry = g_geometry.load();
+    if (!geometry) return true;
+    Vec3 dir{target.x-origin.x,target.y-origin.y,target.z-origin.z};
+    float length = std::sqrt(dir.x*dir.x+dir.y*dir.y+dir.z*dir.z);
+    if (!std::isfinite(length) || length < EPSILON) return true;
+    dir.x/=length; dir.y/=length; dir.z/=length;
+    Vec3 inv{std::abs(dir.x)<EPSILON?1e30f:1/dir.x,
+             std::abs(dir.y)<EPSILON?1e30f:1/dir.y,
+             std::abs(dir.z)<EPSILON?1e30f:1/dir.z};
+    return !TraverseKDTree(geometry->triangles, geometry->root, origin, dir, inv, length);
 }
 
-const std::string& MapRaytrace::CurrentMap() {
-    return g_current_map;
+std::string MapRaytrace::CurrentMap() {
+    const auto geometry = g_geometry.load();
+    return geometry ? geometry->name : "";
 }
 
-bool MapRaytrace::IsReady() {
-    return g_ready;
-}
+bool MapRaytrace::IsReady() { return bool(g_geometry.load()); }
 
-const std::vector<MapRaytrace::Triangle>& MapRaytrace::GetTriangles() {
-    return g_triangles;
+size_t MapRaytrace::TriangleCount() {
+    const auto geometry = g_geometry.load();
+    return geometry ? geometry->triangles.size() : 0;
 }
 
 void MapRaytrace::RenderWireframe(view_matrix_t& matrix, const ImGuiIO& io, ImDrawList* d, const Vec3_t& camera_pos) {
-    if (!g_ready || g_triangles.empty())
-        return;
-
-    // Render triangles as wireframe
-    // Only render triangles in front of camera and within reasonable distance
-    const float max_dist = 5000.0f;
-    
-    for (const auto& tri : g_triangles) {
-        // Quick frustum check: test triangle center
-        Vec3_t center = { (tri.p1.x + tri.p2.x + tri.p3.x) / 3.0f,
-                          (tri.p1.y + tri.p2.y + tri.p3.y) / 3.0f,
-                          (tri.p1.z + tri.p2.z + tri.p3.z) / 3.0f };
-        
-        Vec3_t cam_to_tri = { center.x - camera_pos.x, center.y - camera_pos.y, center.z - camera_pos.z };
-        float dist = std::sqrt(cam_to_tri.x * cam_to_tri.x + cam_to_tri.y * cam_to_tri.y + cam_to_tri.z * cam_to_tri.z);
-        if (dist > max_dist)
-            continue;
-        
-        // Check if in front of camera
-        Vec3_t view_dir;
-        view_dir.x = matrix[0][0] * cam_to_tri.x + matrix[0][1] * cam_to_tri.y + matrix[0][2] * cam_to_tri.z;
-        view_dir.y = matrix[1][0] * cam_to_tri.x + matrix[1][1] * cam_to_tri.y + matrix[1][2] * cam_to_tri.z;
-        view_dir.z = matrix[2][0] * cam_to_tri.x + matrix[2][1] * cam_to_tri.y + matrix[2][2] * cam_to_tri.z;
-        
-        if (view_dir.z <= 0.0f)
-            continue;
-        
-        // Project triangle vertices (convert MapRaytrace::Vec3 to Vec3_t)
-        Vec3_t v1 = { tri.p1.x, tri.p1.y, tri.p1.z };
-        Vec3_t v2 = { tri.p2.x, tri.p2.y, tri.p2.z };
-        Vec3_t v3 = { tri.p3.x, tri.p3.y, tri.p3.z };
-        
-        Vec2_t p1, p2, p3;
-        bool b1 = matrix.wts(v1, io.DisplaySize, p1);
-        bool b2 = matrix.wts(v2, io.DisplaySize, p2);
-        bool b3 = matrix.wts(v3, io.DisplaySize, p3);
-        
-        if (b1 && b2 && b3) {
-            // Color based on distance (closer = brighter)
-            float alpha = std::clamp(1.0f - dist / max_dist, 0.1f, 1.0f);
-            ImU32 color = IM_COL32(0, (int)(255 * alpha), (int)(255 * alpha), (int)(200 * alpha));
-            
-            d->AddLine(p1, p2, color, 0.5f);
-            d->AddLine(p2, p3, color, 0.5f);
-            d->AddLine(p3, p1, color, 0.5f);
+    const auto geometry = g_geometry.load();
+    if (!geometry || !d || io.DisplaySize.x <= 0 || io.DisplaySize.y <= 0) return;
+    for (auto& row : matrix.matrix)
+        for (float value : row) if (!std::isfinite(value)) return;
+    const float radius = std::clamp(cfg::esp::wireframe_max_dist,100.0f,10000.0f);
+    if (!std::isfinite(radius)) return;
+    const auto distance2 = [&](const AABB& box) {
+        const float x=camera_pos.x-std::clamp(camera_pos.x,box.min.x,box.max.x);
+        const float y=camera_pos.y-std::clamp(camera_pos.y,box.min.y,box.max.y);
+        const float z=camera_pos.z-std::clamp(camera_pos.z,box.min.z,box.max.z);
+        return x*x+y*y+z*z;
+    };
+    // Homogeneous clip coordinates use matrix row 3 for perspective W.
+    struct Clip { float x,y,w; };
+    auto project = [&](Vec3 p) {
+        return Clip{matrix[0][0]*p.x+matrix[0][1]*p.y+matrix[0][2]*p.z+matrix[0][3],
+                    matrix[1][0]*p.x+matrix[1][1]*p.y+matrix[1][2]*p.z+matrix[1][3],
+                    matrix[3][0]*p.x+matrix[3][1]*p.y+matrix[3][2]*p.z+matrix[3][3]};
+    };
+    auto planes = [](Clip p) { return std::array<float,5>{p.w-.01f,p.w+p.x,p.w-p.x,p.w+p.y,p.w-p.y}; };
+    auto outside = [&](const AABB& box) {
+        unsigned mask=31;
+        for(int i=0;i<8;++i) {
+            auto p=project({i&1?box.max.x:box.min.x,i&2?box.max.y:box.min.y,i&4?box.max.z:box.min.z});
+            auto f=planes(p); unsigned out=0;
+            for(int j=0;j<5;++j) if(f[j]<0) out|=1u<<j;
+            mask &= out;
         }
-    }
+        return mask != 0;
+    };
+    // Bound draw-list growth and prioritize nearby nodes when the budget is reached.
+    const float opacity = std::clamp(cfg::esp::wireframe_opacity, 0.f, 1.f);
+    if (!std::isfinite(opacity) || opacity <= 0) return;
+    ImVec4 tint = cfg::esp::wireframe_color;
+    tint.w = 1;
+    const ImU32 rgb = ImGui::ColorConvertFloat4ToU32(tint) & ~IM_COL32_A_MASK;
+    int remaining=std::clamp(cfg::esp::wireframe_budget, 500, 8000);
+    int candidates_left=remaining*8;
+    auto edge = [&](Clip a, Clip b, ImU32 color) {
+        if (!remaining) return;
+        float lo=0,hi=1;
+        auto fa=planes(a),fb=planes(b);
+        for(int i=0;i<5;++i) {
+            if(fa[i]<0 && fb[i]<0) return;
+            if(fa[i]<0) lo=std::max(lo,fa[i]/(fa[i]-fb[i]));
+            else if(fb[i]<0) hi=std::min(hi,fa[i]/(fa[i]-fb[i]));
+        }
+        if(lo>hi) return;
+        auto screen = [&](float t) {
+            float w=a.w+(b.w-a.w)*t;
+            return ImVec2((1+(a.x+(b.x-a.x)*t)/w)*io.DisplaySize.x*.5f,
+                          (1-(a.y+(b.y-a.y)*t)/w)*io.DisplaySize.y*.5f);
+        };
+        d->AddLine(screen(lo),screen(hi),color,1.0f);
+        --remaining;
+    };
+    auto visit = [&](auto&& self, const KDNode* node) -> void {
+        if(!node || !remaining || !candidates_left || distance2(node->bbox)>radius*radius || outside(node->bbox)) return;
+        if(!node->triangle_indices.empty()) {
+            for(auto id:node->triangle_indices) {
+                if(!candidates_left--) { candidates_left=0; break; }
+                const auto& t=geometry->triangles[id];
+                const float dist2=distance2(ComputeBounds(t));
+                if(dist2>radius*radius) continue;
+                const int alpha=int(255*opacity*std::clamp(1-std::sqrt(dist2)/radius,.18f,1.f));
+                const auto a=project(t.p1),b=project(t.p2),c=project(t.p3);
+                const ImU32 color=rgb | (ImU32(alpha) << IM_COL32_A_SHIFT);
+                edge(a,b,color);edge(b,c,color);edge(c,a,color);
+                if(!remaining) break;
+            }
+            return;
+        }
+        auto* first=node->left;auto* second=node->right;
+        if(first && second && distance2(first->bbox)>distance2(second->bbox)) std::swap(first,second);
+        self(self,first);self(self,second);
+    };
+    d->PushClipRect(ImVec2(0,0),io.DisplaySize,true);
+    visit(visit,geometry->root);
+    d->PopClipRect();
 }

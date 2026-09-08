@@ -4,6 +4,7 @@
 #include "core/offsets/Dumper.hpp"
 #include "core/engine/classes/MapRaytrace.hpp"
 #include "core/engine/classes/MapExtractor.hpp"
+#include <future>
 
 bool Cache::Refresh() {
     return Get().RefreshImpl();
@@ -49,15 +50,32 @@ bool Cache::RefreshImpl() {
     globals.Update();
     bomb.Update();
 
-	// Auto-reload map geometry when the map changes
-	if (globals.map_name[0] != '\0') {
-		static std::string last_map;
-		std::string current_map(globals.map_name);
-		if (current_map != last_map) {
-			MapExtractor::EnsureMapLoaded(current_map);
-			last_map = current_map;
-		}
-	}
+    // Extraction and BVH construction must never run under the cache mutex.
+    // One worker at a time; failed maps retry without logging every cache tick.
+    static std::future<bool> map_job;
+    static std::string requested_map;
+    static auto retry_at = steady_clock::time_point{};
+    const std::string current_map = globals.in_match
+        ? std::filesystem::path(std::string(globals.map_name,
+              strnlen(globals.map_name, sizeof(globals.map_name)))).stem().string() : "";
+    if (requested_map != current_map) {
+        requested_map = current_map;
+        MapRaytrace::SetDesiredMap(current_map);
+        retry_at = now;
+    }
+    if (map_job.valid() && map_job.wait_for(0ms) == std::future_status::ready) {
+        map_job.get();
+    }
+    if (!map_job.valid() && !current_map.empty() && !MapRaytrace::IsReady() && now >= retry_at) {
+        retry_at = now + 30s;
+        map_job = std::async(std::launch::async, [current_map] {
+            try { return MapExtractor::EnsureMapLoaded(current_map); }
+            catch (const std::exception& e) {
+                LOGF(WARNING, "[raytrace] map load failed: {}", e.what());
+                return false;
+            }
+        });
+    }
 
     // Aggressive diagnostics: log on FIRST tick, then every ~3 seconds
     static int cache_tick = 0;

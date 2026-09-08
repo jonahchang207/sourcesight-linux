@@ -355,7 +355,8 @@ ExtractResult ExtractMap(const std::string& map_name, const std::string& output_
             
             // Save as .tri format (compatible with MapRaytrace - just array of Triangle {Vec3 p1,p2,p3})
             std::string tri_path = output_dir + "/" + map_name + ".tri";
-            std::ofstream out(tri_path, std::ios::binary);
+            const std::string temporary_path = tri_path + ".tmp";
+            std::ofstream out(temporary_path, std::ios::binary);
             if (!out) {
                 result.success = false;
                 result.error = "Failed to open output .tri file";
@@ -369,14 +370,17 @@ ExtractResult ExtractMap(const std::string& map_name, const std::string& output_
                 total_tris += mesh.size();
             }
 
-            for (const auto& mesh : combined) {
-                for (const auto& tri : mesh) {
-                    out.write(reinterpret_cast<const char*>(&tri.v0), sizeof(Vector3));
-                    out.write(reinterpret_cast<const char*>(&tri.v1), sizeof(Vector3));
-                    out.write(reinterpret_cast<const char*>(&tri.v2), sizeof(Vector3));
-                }
-            }
+            static_assert(sizeof(TriangleCombined) == 36);
+            for (const auto& mesh : combined)
+                out.write(reinterpret_cast<const char*>(mesh.data()), mesh.size() * sizeof(TriangleCombined));
             out.close();
+            if (!out || total_tris == 0) {
+                result.error = "Empty geometry or incomplete mesh write";
+                return result;
+            }
+            // Readers see only a complete mesh; a failed write leaves a .tmp
+            // diagnostic file rather than poisoning the persistent map cache.
+            std::filesystem::rename(temporary_path, tri_path);
 
             LOGF(INFO, "[map_extractor] Saved {} triangles to {}", total_tris, tri_path);
             result.success = true;
@@ -404,9 +408,8 @@ bool EnsureMapLoaded(const std::string& map_name) {
         return true;
 
     // Check if .tri exists locally
-    if (HasMapData(map_name)) {
-        return MapRaytrace::LoadMap(map_name);
-    }
+    if (MapRaytrace::LoadMap(map_name))
+        return true;
 
     // Try to extract
     auto result = ExtractMap(map_name);

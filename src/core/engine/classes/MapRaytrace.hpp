@@ -57,18 +57,21 @@ bool LoadMap(const std::string& map_name);
 // Unload the current map and free memory.
 void Unload();
 
+// Cancel an obsolete load and restrict publication to the current game map.
+void SetDesiredMap(const std::string& map_name);
+
 // Check if a ray from `origin` to `target` is blocked by map geometry.
 // Returns true if the path is CLEAR (visible), false if blocked.
 bool IsVisible(const Vec3& origin, const Vec3& target);
 
 // Get the name of the currently loaded map (empty if none).
-const std::string& CurrentMap();
+std::string CurrentMap();
 
 // True when a valid map is loaded and ready for raycasting.
 bool IsReady();
 
-// Debug: Get all triangles for wireframe rendering (call from render thread only).
-const std::vector<Triangle>& GetTriangles();
+// Safe metadata access; mesh storage never escapes its immutable snapshot.
+size_t TriangleCount();
 
 // Debug: Render wireframe of collision mesh.
 void RenderWireframe(view_matrix_t& matrix, const ImGuiIO& io, ImDrawList* d, const Vec3_t& camera_pos);

@@ -16,7 +16,7 @@ jobs:
       - name: Install build dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm git cmake curl glfw-x11 libx11 libxrandr libxtst mesa ttf-dejavu
+          pacman -S --noconfirm git cmake curl glfw-x11 libx11 libxext libxi libxrandr libxtst mesa ttf-dejavu nodejs
 
       - uses: actions/checkout@v6
         with:
@@ -28,13 +28,10 @@ jobs:
           cmake --build build --parallel "$(nproc)"
 
       - name: Package
-        run: >-
-          tar -czf sourcesight-linux-x64.tar.gz
-          -C build sourcesight
-          -C .. README.md LICENSE scripts/install-omarchy.sh
+        run: node scripts/package-release.mjs
 
       - uses: actions/upload-artifact@v7
         with:
           name: sourcesight-linux-release
-          path: sourcesight-linux-x64.tar.gz
+          path: build/release/*
           if-no-files-found: error

@@ -36,6 +36,6 @@ private:
 private:
     Status status;
     bool isSetup = false;
-    int current_version = 115;
+    int current_version = 116;
     std::string status_url = "https://raw.githubusercontent.com/jonahchang207/sourcesight-linux/main/.github/status.json";
 };

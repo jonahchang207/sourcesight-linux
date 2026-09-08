@@ -56,14 +56,6 @@ namespace offsets
 		constexpr std::ptrdiff_t m_pViewModelServices = 0x1368; // CPlayer_ViewModelServices*
 		constexpr std::ptrdiff_t m_hViewModel = 0x40; // CHandle - view model
 
-		// Skin changer netvars (C_EconEntity / C_EconItemView fallback fields)
-		constexpr std::ptrdiff_t m_nFallbackPaintKit = 0x2510; // int32 - paint kit index
-		constexpr std::ptrdiff_t m_flFallbackWear = 0x2518; // float - wear (0=FN, 1=BS)
-		constexpr std::ptrdiff_t m_nFallbackSeed = 0x2514; // int32 - pattern seed
-		constexpr std::ptrdiff_t m_nFallbackStatTrak = 0x251C; // int32 - stattrak kills (-1 = none)
-		constexpr std::ptrdiff_t m_iItemIDHigh = 0x10D8; // int32 - on C_EconItemView sub-object
-		constexpr std::ptrdiff_t m_iAccountID = 0x10E0; // int32 - account ID for ownership
-		constexpr std::ptrdiff_t m_OriginalOwnerXuidLow = 0x2508; // int32 - ownership bypass
 	}
 
 	namespace bomb {

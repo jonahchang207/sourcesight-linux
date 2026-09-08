@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(sourcesight VERSION 0.1.0 LANGUAGES CXX)
+project(sourcesight VERSION 0.6.0 LANGUAGES CXX)
 
 if(NOT UNIX OR APPLE)
     message(FATAL_ERROR "This CMake target is for Linux. Use the Visual Studio solution on Windows.")
@@ -14,7 +14,7 @@ find_package(X11 REQUIRED)
 find_package(glfw3 3.4 REQUIRED)
 
 # VisCheckCS2 for map collision parsing
-add_subdirectory(src/external/VisCheckCS2)
+include(cmake/VisCheckCS2.cmake)
 
 file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 list(FILTER APP_SOURCES EXCLUDE REGEX "/external/")

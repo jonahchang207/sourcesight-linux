@@ -22,7 +22,7 @@ jobs:
       - name: Install build dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm git cmake curl glfw-x11 libx11 libxrandr libxtst mesa ttf-dejavu
+          pacman -S --noconfirm git cmake curl glfw-x11 libx11 libxext libxi libxrandr libxtst mesa ttf-dejavu nodejs
 
       - uses: actions/checkout@v6
         with:
@@ -40,3 +40,6 @@ jobs:
           name: sourcesight-linux
           path: build/sourcesight
           if-no-files-found: error
+
+      - name: Geometry regression checks
+        run: node tools/test-map-geometry.mjs

@@ -477,8 +477,8 @@ void Overlays::RenderRadar() {
         if (ImGui::Begin("Radar", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar)) {
             pos = ImGui::GetWindowPos();
             size = ImGui::GetWindowSize();
-            ImGui::End();
         }
+        ImGui::End();
     }
 
     auto d = ImGui::GetBackgroundDrawList();
@@ -489,7 +489,8 @@ void Overlays::RenderRadar() {
     const float ry = size.y * 0.5f;
     const float radius = std::min(rx, ry);
 
-    theme::DrawGlass(d, pos, size, 6.f, theme::kSurfaceDeep, 0.92f);
+    theme::DrawGlass(d, pos, size, 6.f, theme::kSurfaceDeep,
+                     std::clamp(cfg::world::radar::opacity, 0.f, 1.f));
 
     d->AddCircle(ImVec2(cx, cy), radius * 0.333f, theme::Pack(theme::WithAlpha(theme::kBorderBase, 0.55f)));
     d->AddCircle(ImVec2(cx, cy), radius * 0.666f, theme::Pack(theme::WithAlpha(theme::kBorderBase, 0.55f)));
