@@ -305,6 +305,14 @@ bool Config::ReadImpl(const std::string& path) {
 
 		// radar
 		cfg::world::radar::enabled = data["world"]["radar"].value("enabled", true);
+		cfg::world::radar::minimap = data["world"]["radar"].value("minimap", true);
+		cfg::world::radar::auto_sync = data["world"]["radar"].value("auto_sync", true);
+		cfg::world::radar::zoom = std::clamp(data["world"]["radar"].value("zoom", .7f), .25f, 1.f);
+		cfg::world::radar::hud_scale = std::clamp(data["world"]["radar"].value("hud_scale", 1.f), .5f, 2.f);
+		cfg::world::radar::hud_size = std::clamp(data["world"]["radar"].value("hud_size", 1.f), .5f, 2.f);
+		cfg::world::radar::calibration_height = std::clamp(data["world"]["radar"].value("calibration_height", 0.f), 0.f, 16384.f);
+		cfg::world::radar::scale_correction = std::clamp(data["world"]["radar"].value("scale_correction", 1.f), .75f, 1.25f);
+		cfg::world::radar::offset = JsonToVec2(data["world"]["radar"], "offset", {0.f, 0.f});
 		cfg::world::radar::opacity = std::clamp(data["world"]["radar"].value("opacity", 0.20f), 0.0f, 1.0f);
 		cfg::world::radar::no_rotate = data["world"]["radar"].value("no_rotate", false);
 		cfg::world::radar::range = data["world"]["radar"].value("range", 2000.f);
@@ -514,6 +522,14 @@ bool Config::WriteImpl(const std::string& path) {
 
 	// radar
 	data["world"]["radar"]["enabled"] = cfg::world::radar::enabled;
+	data["world"]["radar"]["minimap"] = cfg::world::radar::minimap;
+	data["world"]["radar"]["auto_sync"] = cfg::world::radar::auto_sync;
+	data["world"]["radar"]["zoom"] = cfg::world::radar::zoom;
+	data["world"]["radar"]["hud_scale"] = cfg::world::radar::hud_scale;
+	data["world"]["radar"]["hud_size"] = cfg::world::radar::hud_size;
+	data["world"]["radar"]["calibration_height"] = cfg::world::radar::calibration_height;
+	data["world"]["radar"]["scale_correction"] = cfg::world::radar::scale_correction;
+	Vec2ToJson(data["world"]["radar"], "offset", cfg::world::radar::offset);
 	data["world"]["radar"]["opacity"] = cfg::world::radar::opacity;
 	data["world"]["radar"]["no_rotate"] = cfg::world::radar::no_rotate;
 	data["world"]["radar"]["range"] = cfg::world::radar::range;

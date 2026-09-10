@@ -124,6 +124,14 @@ namespace cfg {
 		}
 
 		namespace radar {
+			inline bool minimap = true;
+			inline bool auto_sync = true;
+			inline float zoom = .7f;
+			inline float hud_scale = 1.f;
+			inline float hud_size = 1.f;
+			inline float calibration_height = 0.f; // 0 preserves legacy pixel coordinates
+			inline float scale_correction = 1.f;
+			inline Vec2_t offset{0.f,0.f};
 			inline bool enabled = true;
 			inline float opacity = 0.20f;
 			inline bool no_rotate = false;

@@ -28,6 +28,12 @@ Maintained by **Jonah Chang**.
 - Transparent graphite overlay surfaces and adjustable radar opacity.
 - SkinChanger removed from the implementation, menu and configuration.
 
+## Radar calibration
+
+- **World → Radar:** Match CS2 minimap and Apply CS2 zoom are enabled by default. Set CS2 radar zoom to match `cl_radar_scale` (default `0.70`), HUD scaling to match `hud_scaling`, and Radar HUD size to match `cl_hud_radar_scale`. With the menu open, align the guide circle and cross with the game radar using Position, Base size, and Offset. Then adjust Calibrated range until teammate markers line up; decrease range if markers cluster too close to the center. Range is calibrated at zoom `0.70`; higher zoom increases marker separation. Recalibrate after changing maps: collision-mesh bounds cannot determine overview scale. Use centered radar with dynamic zoom disabled and match the rotation setting. Use current resolution records the game-window height; saved calibration then scales uniformly with viewport height. Save the profile to keep the calibration.
+
+See [live calibration notes](docs/radar-calibration.md) for the measured Dust II settings.
+
 ## Download and run
 
 Download `sourcesight-v0.6.0-linux-x86_64.tar.gz` and its checksum from the

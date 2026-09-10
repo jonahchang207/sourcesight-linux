@@ -1,4 +1,5 @@
 #include "Overlays.hpp"
+#include "RadarProjection.hpp"
 
 #include "updater/Updater.hpp"
 #include "gui/renderer/Renderer.hpp" // Circular dependency
@@ -468,34 +469,53 @@ void Overlays::RenderRadar() {
 
     auto& pos = cfg::world::radar::pos;
     auto& size = cfg::world::radar::size;
-    float range = cfg::world::radar::range;
+    const bool minimap = cfg::world::radar::minimap;
+    const float resolution_scale = radar::ResolutionScale(minimap,
+        ImGui::GetIO().DisplaySize.y, cfg::world::radar::calibration_height);
+    const float scale = resolution_scale * radar::HudScale(minimap, cfg::world::radar::hud_scale,
+                                        cfg::world::radar::hud_size);
+    // Collision bounds include skyboxes and outlying geometry. They do not
+    // describe the radar overview and must never determine marker scale.
+    const float range = radar::WorldRadius(cfg::world::radar::range,
+        minimap && cfg::world::radar::auto_sync, cfg::world::radar::zoom,
+        cfg::world::radar::scale_correction);
+    ImVec2 draw_pos = (pos + cfg::world::radar::offset) * resolution_scale;
+    ImVec2 draw_size(radar::Positive(size.x, 200.f) * scale,
+                     radar::Positive(size.y, 200.f) * scale);
 
     if (is_menu_open) {
         ImGui::SetNextWindowBgAlpha(0.0f);
-        ImGui::SetNextWindowPos(pos, ImGuiCond_Once);
-        ImGui::SetNextWindowSize(size, ImGuiCond_Once);
-        if (ImGui::Begin("Radar", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar)) {
-            pos = ImGui::GetWindowPos();
-            size = ImGui::GetWindowSize();
+        ImGui::SetNextWindowPos(draw_pos, ImGuiCond_Always);
+        ImGui::SetNextWindowSize(draw_size, ImGuiCond_Always);
+        const auto flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar |
+            (minimap ? ImGuiWindowFlags_NoTitleBar : ImGuiWindowFlags_None);
+        if (ImGui::Begin("Radar", nullptr, flags)) {
+            draw_pos = ImGui::GetWindowPos();
+            draw_size = ImGui::GetWindowSize();
+            pos = draw_pos / resolution_scale - cfg::world::radar::offset;
+            size = draw_size / scale;
         }
         ImGui::End();
     }
 
     auto d = ImGui::GetBackgroundDrawList();
-
-    const float cx = pos.x + size.x * 0.5f;
-    const float cy = pos.y + size.y * 0.5f;
-    const float rx = size.x * 0.5f;
-    const float ry = size.y * 0.5f;
+    const float cx = draw_pos.x + draw_size.x * .5f;
+    const float cy = draw_pos.y + draw_size.y * .5f;
+    const float rx = draw_size.x * .5f;
+    const float ry = draw_size.y * .5f;
     const float radius = std::min(rx, ry);
-
-    theme::DrawGlass(d, pos, size, 6.f, theme::kSurfaceDeep,
-                     std::clamp(cfg::world::radar::opacity, 0.f, 1.f));
-
-    d->AddCircle(ImVec2(cx, cy), radius * 0.333f, theme::Pack(theme::WithAlpha(theme::kBorderBase, 0.55f)));
-    d->AddCircle(ImVec2(cx, cy), radius * 0.666f, theme::Pack(theme::WithAlpha(theme::kBorderBase, 0.55f)));
-    d->AddLine(ImVec2(pos.x + 4.f, cy), ImVec2(pos.x + size.x - 4.f, cy), theme::Pack(theme::WithAlpha(theme::kBorderBase, 0.55f)));
-    d->AddLine(ImVec2(cx, pos.y + 4.f), ImVec2(cx, pos.y + size.y - 4.f), theme::Pack(theme::WithAlpha(theme::kBorderBase, 0.55f)));
+    const float marker_rx = std::max(1.f, (minimap ? radius : rx) - 6.f * scale);
+    const float marker_ry = std::max(1.f, (minimap ? radius : ry) - 6.f * scale);
+    if (!minimap) {
+        theme::DrawGlass(d, draw_pos, draw_size, 6.f, theme::kSurfaceDeep,
+                         std::clamp(cfg::world::radar::opacity, 0.f, 1.f));
+        d->AddCircle(ImVec2(cx, cy), radius * .333f, theme::Pack(theme::kBorderBase));
+        d->AddCircle(ImVec2(cx, cy), radius * .666f, theme::Pack(theme::kBorderBase));
+    } else if (is_menu_open) {
+        d->AddCircle(ImVec2(cx, cy), radius, theme::Pack(theme::kAccent));
+        d->AddLine(ImVec2(cx - 6, cy), ImVec2(cx + 6, cy), theme::Pack(theme::kAccent));
+        d->AddLine(ImVec2(cx, cy - 6), ImVec2(cx, cy + 6), theme::Pack(theme::kAccent));
+    }
 
     for (auto& player : players) {
         if (!player.alive)
@@ -510,25 +530,11 @@ void Overlays::RenderRadar() {
         if (dist > range)
             continue;
 
-        float nx = delta.x / range;
-        float ny = delta.y / range;
-
-        float sx, sy;
-        if (!cfg::world::radar::no_rotate) {
-            float rx = matrix[0][0];
-            float ry = matrix[0][1];
-            float len = sqrtf(rx * rx + ry * ry);
-            if (len > 0.001f) { rx /= len; ry /= len; }
-            float fx = -ry;
-            float fy =  rx;
-            float rad_x = nx * rx + ny * ry;
-            float rad_y = nx * fx + ny * fy;
-            sx = cx + rad_x * (size.x * 0.5f - 6.f);
-            sy = cy - rad_y * (size.y * 0.5f - 6.f);
-        } else {
-            sx = cx + nx * (size.x * 0.5f - 6.f);
-            sy = cy - ny * (size.y * 0.5f - 6.f);
-        }
+        const auto projected = radar::Rotate(delta.x, delta.y,
+            !cfg::world::radar::no_rotate, matrix[0][0], matrix[0][1]);
+        const float sx = cx + projected.x / range * marker_rx;
+        const float sy = cy + projected.y / range * marker_ry;
+        if (!std::isfinite(sx) || !std::isfinite(sy)) continue;
 
         bool mate = player.team == local.team;
         ImU32 col = mate
@@ -539,10 +545,11 @@ void Overlays::RenderRadar() {
         d->AddCircle(ImVec2(sx, sy), 4.f, IM_COL32(0, 0, 0, 180));
     }
 
-    d->AddCircleFilled(ImVec2(cx, cy), 5.f, IM_COL32(100, 180, 255, 255));
-    d->AddCircle(ImVec2(cx, cy), 5.f, IM_COL32(0, 0, 0, 180));
-
-    d->AddText(ImVec2(pos.x + 6.f, pos.y + 4.f), IM_COL32(180, 180, 180, 200), "Radar");
+    if (!minimap) {
+        d->AddCircleFilled(ImVec2(cx, cy), 5.f, IM_COL32(100, 180, 255, 255));
+        d->AddCircle(ImVec2(cx, cy), 5.f, IM_COL32(0, 0, 0, 180));
+        d->AddText(draw_pos + ImVec2(6, 4), IM_COL32(180, 180, 180, 200), "Radar");
+    }
 }
 
 void Overlays::RenderBomb() {

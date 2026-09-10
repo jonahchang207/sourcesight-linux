@@ -1,3 +1,4 @@
+#include "gui/frontend/overlays/RadarProjection.hpp"
 #include "Renderer.hpp"
 #include "window/Window.hpp"
 
@@ -39,8 +40,14 @@ static void ComputeCaptureUnion(float out[4]) {
 
     // Movable / resizable widgets; sized generously since the actual window
     // decorations also live inside these rects.
-    include(cfg::world::radar::pos.x, cfg::world::radar::pos.y,
-            cfg::world::radar::size.x, cfg::world::radar::size.y, 40.f);
+    const float radar_resolution = radar::ResolutionScale(cfg::world::radar::minimap,
+        io.DisplaySize.y, cfg::world::radar::calibration_height);
+    const float radar_scale = radar_resolution * radar::HudScale(cfg::world::radar::minimap,
+        cfg::world::radar::hud_scale, cfg::world::radar::hud_size);
+    include((cfg::world::radar::pos.x + cfg::world::radar::offset.x) * radar_resolution,
+            (cfg::world::radar::pos.y + cfg::world::radar::offset.y) * radar_resolution,
+            radar::Positive(cfg::world::radar::size.x, 200.f) * radar_scale,
+            radar::Positive(cfg::world::radar::size.y, 200.f) * radar_scale, 40.f);
     include(cfg::world::velocity::pos.x, cfg::world::velocity::pos.y,
             cfg::world::velocity::size.x, cfg::world::velocity::size.y, 40.f);
     include(cfg::world::bomb::pos.x, cfg::world::bomb::pos.y, 200.f, 56.f, 40.f);

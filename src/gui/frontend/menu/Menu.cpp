@@ -130,7 +130,7 @@ bool Toggle(const char* label, bool* value) {
 
 // ── Button Helpers ────────────────────────────────────────────────────────
 
-// Primary action button — sapphire CTA, clearly the main action.
+// Primary action button in the Graphite Studio pale-green accent.
 bool PrimaryButton(const char* label, const ImVec2& size = ImVec2(-1, 30)) {
     ImGui::PushStyleColor(ImGuiCol_Button, studioAccentSoft);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(.84f,.93f,.79f,1));
@@ -511,7 +511,32 @@ void Menu::RenderImpl() {
                         ImGui::BeginDisabled(!cfg::world::radar::enabled);
                         {
                             ImGui::SliderFloat("Opacity", &cfg::world::radar::opacity, 0, 1, "%.2f");
-                            ImGui::SliderFloat("Range", &cfg::world::radar::range, 100.f, 8000.f, "%.0f u");
+                            Toggle("Match CS2 minimap", &cfg::world::radar::minimap);
+                            Toggle("Apply CS2 zoom", &cfg::world::radar::auto_sync);
+                            ImGui::SliderFloat("CS2 radar zoom", &cfg::world::radar::zoom, .25f, 1.f, "%.2f");
+                            ImGui::SliderFloat("Scale correction", &cfg::world::radar::scale_correction, .75f, 1.25f, "%.2f");
+                            ImGui::SliderFloat("Calibrated range", &cfg::world::radar::range, 100.f, 8000.f, "%.0f u");
+                            ImGui::SetItemTooltip("World radius at zoom 0.70. Lower this if dots cluster too close to the center. Calibrate again after changing maps; collision bounds cannot supply the minimap scale.");
+                            ImGui::SliderFloat("HUD scaling", &cfg::world::radar::hud_scale, .5f, 2.f, "%.2f");
+                            ImGui::SetItemTooltip("Match hud_scaling. Scales the overlay rectangle from its top-left corner.");
+                            ImGui::SliderFloat("Radar HUD size", &cfg::world::radar::hud_size, .5f, 2.f, "%.2f");
+                            ImGui::SetItemTooltip("Match cl_hud_radar_scale. Adjust position separately if the HUD moves.");
+                            ImGui::DragFloat2("Position", &cfg::world::radar::pos.x, 1.f);
+                            ImGui::DragFloat2("Base size", &cfg::world::radar::size.x, 1.f, 40.f, 1000.f, "%.0f", ImGuiSliderFlags_AlwaysClamp);
+                            ImGui::DragFloat2("Offset", &cfg::world::radar::offset.x, 1.f);
+                            if (ImGui::Button("Use current resolution")) {
+                                const float height = ImGui::GetIO().DisplaySize.y;
+                                if (height > 0.f) {
+                                    const float previous = cfg::world::radar::calibration_height;
+                                    const float factor = previous > 0.f ? height / previous : 1.f;
+                                    cfg::world::radar::pos *= factor;
+                                    cfg::world::radar::size *= factor;
+                                    cfg::world::radar::offset *= factor;
+                                    cfg::world::radar::calibration_height = height;
+                                }
+                            }
+                            ImGui::SetItemTooltip("Remember this game-window height so the calibrated radar scales with resolution changes.");
+                            ImGui::TextWrapped("Align the guide circle and center with CS2 first, then adjust calibrated range until teammate dots match. Use centered radar with dynamic zoom off.");
                             Toggle("Disable Rotation", &cfg::world::radar::no_rotate);
                         }
                         ImGui::EndDisabled();
