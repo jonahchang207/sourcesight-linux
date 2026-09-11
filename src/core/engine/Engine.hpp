@@ -1,6 +1,7 @@
 #pragma once
 #include "config/Config.hpp"
 #include "core/memory/Memory.hpp"
+#include <thread>
 
 class Engine {
 public:
@@ -11,6 +12,7 @@ public:
     Engine& operator=(Engine&&)      = delete;
 
    static bool Init();
+   static void Stop();
    static ProcessModule GetClient();
    static ProcessModule GetEngine();
    static std::shared_ptr<pProcess> GetProcess(); // Refactor this so its easier to access
@@ -28,10 +30,12 @@ private:
     bool AwaitProcess();
     bool AwaitModules();
 
-    void Thread();
+    void Thread(std::stop_token stop);
 
 private:
     std::shared_ptr<pProcess> process;
     ProcessModule client;
     ProcessModule engine;
+    // Destroyed first, while the process/modules are still alive.
+    std::jthread worker;
 };

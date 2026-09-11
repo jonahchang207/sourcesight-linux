@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 
 class Renderer {
 public:
@@ -31,8 +32,8 @@ private:
     bool HandleState();
     bool HandleWindowOrder();
 private:
-    bool isRunning = true;
-    bool isOpen = false;
+    std::atomic<bool> isRunning{true};
+    std::atomic<bool> isOpen{false};
 
-    bool isFocused = false;
+    std::atomic<bool> isFocused{false};
 };

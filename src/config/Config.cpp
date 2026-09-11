@@ -2,9 +2,15 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <mutex>
+#include <system_error>
+#include <cerrno>
+#include <fcntl.h>
+#include <unistd.h>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Profile plumbing
@@ -20,11 +26,14 @@ Config::Config() {
 	std::error_code ec;
 	if (!std::filesystem::exists(active_path, ec) &&
 	    std::filesystem::exists("config.json", ec)) {
-		std::filesystem::copy_file(
-			"config.json", active_path,
-			std::filesystem::copy_options::overwrite_existing, ec);
-		if (!ec)
-			LOGF(INFO, "Imported legacy config.json into profile '{}'", active);
+		std::ifstream legacy("config.json", std::ios::binary);
+		const std::string contents((std::istreambuf_iterator<char>(legacy)), {});
+		if (legacy.good() || legacy.eof()) {
+			if (AtomicWrite(active_path, contents, false))
+				LOGF(INFO, "Imported legacy config.json into profile '{}'", active);
+		} else {
+			SetError(ErrorCode::ReadFailed, "The legacy configuration could not be imported.");
+		}
 	}
 
 	EnsureMeta();
@@ -48,12 +57,12 @@ std::string Config::GetActiveProfile() {
 
 void Config::SetActiveProfile(const std::string& name) {
 	const std::string clean = SanitizeName(name);
-	if (clean.empty()) return;
+	if (clean.empty()) { SetError(ErrorCode::InvalidProfileName, "Choose a valid profile name."); return; }
 	EnsureConfigDir();
 	json meta;
 	meta["active"] = clean;
-	std::ofstream f(MetaPath());
-	f << std::setw(4) << meta << std::endl;
+	if (AtomicWrite(MetaPath(), meta.dump(2) + "\n", true))
+		SetError(ErrorCode::None, "");
 }
 
 std::vector<std::string> Config::ListProfiles() {
@@ -76,27 +85,31 @@ bool Config::HasProfile(const std::string& name) {
 }
 
 bool Config::LoadProfile(const std::string& name) {
+	std::lock_guard lock(Mutex());
 	const std::string clean = SanitizeName(name);
 	if (clean.empty()) {
+		SetError(ErrorCode::InvalidProfileName, "Choose a valid profile name.");
 		LOGF(WARNING, "Invalid profile name, refusing to load");
 		return false;
 	}
-	SetActiveProfile(clean);
 	const bool ok = GetInstance().ReadImpl(ProfilePath(clean));
-	LOGF(INFO, "Loaded profile '{}'", clean);
+	if (ok) SetActiveProfile(clean);
+	LOGF(INFO, "{} profile '{}'", ok ? "Loaded" : "Did not load", clean);
 	return ok;
 }
 
 bool Config::SaveProfile(const std::string& name) {
+	std::lock_guard lock(Mutex());
 	const std::string clean = SanitizeName(name);
 	if (clean.empty()) {
+		SetError(ErrorCode::InvalidProfileName, "Choose a valid profile name.");
 		LOGF(WARNING, "Invalid profile name, refusing to save");
 		return false;
 	}
 	EnsureConfigDir();
-	SetActiveProfile(clean);
 	const bool ok = GetInstance().WriteImpl(ProfilePath(clean));
-	LOGF(INFO, "Saved profile '{}'", clean);
+	if (ok) SetActiveProfile(clean);
+	LOGF(INFO, "{} profile '{}'", ok ? "Saved" : "Did not save", clean);
 	return ok;
 }
 
@@ -143,6 +156,220 @@ std::mutex& Config::Mutex() {
 	return m;
 }
 
+namespace {
+Config::Error& LastConfigError() {
+    static Config::Error error;
+    return error;
+}
+
+std::mutex& ConfigErrorMutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+bool& FailWritesForTesting() {
+    static bool fail = false;
+    return fail;
+}
+
+bool CompatibleValue(const json& actual, const json& expected) {
+    if (expected.is_object()) return actual.is_object();
+    if (expected.is_array()) {
+        if (!actual.is_array() || actual.size() != expected.size()) return false;
+        for (std::size_t i = 0; i < actual.size(); ++i)
+            if (!CompatibleValue(actual[i], expected[i])) return false;
+        return true;
+    }
+    if (expected.is_number_integer() || expected.is_number_unsigned())
+        return actual.is_number_integer() && actual >= std::numeric_limits<int>::min() && actual <= std::numeric_limits<int>::max();
+    if (expected.is_number_float()) {
+        if (!actual.is_number()) return false;
+        const double number = actual.get<double>();
+        return std::isfinite(number) && number >= -std::numeric_limits<float>::max() && number <= std::numeric_limits<float>::max();
+    }
+    return actual.type() == expected.type();
+}
+
+bool ValidateKnownValues(json& actual, const json& schema, std::string& error) {
+    if (!actual.is_object() || !schema.is_object()) return true;
+    for (auto it = schema.begin(); it != schema.end(); ++it) {
+        if (!actual.contains(it.key())) {
+            if (it.value().is_object()) actual[it.key()] = json::object();
+            else continue;
+        }
+        auto& value = actual[it.key()];
+        if (it.value().is_object()) {
+            if (!value.is_object()) { error = "A configuration section has an invalid shape."; return false; }
+            if (!ValidateKnownValues(value, it.value(), error)) return false;
+        } else if (!CompatibleValue(value, it.value())) {
+            error = "A configuration value has an invalid type or boundary.";
+            return false;
+        }
+    }
+    return true;
+}
+
+bool WriteDurableTemporary(const std::filesystem::path& parent, const std::string& stem,
+                           const std::string& content, std::filesystem::path& output) {
+    std::string pattern = (parent / (stem + ".tmp-XXXXXX")).string();
+    std::vector<char> writable(pattern.begin(), pattern.end());
+    writable.push_back('\0');
+    const int fd = mkstemp(writable.data());
+    if (fd < 0) return false;
+    output = writable.data();
+    std::size_t written = 0;
+    while (written < content.size()) {
+        const auto count = ::write(fd, content.data() + written, content.size() - written);
+        if (count <= 0) {
+            ::close(fd);
+            std::error_code ec;
+            std::filesystem::remove(output, ec);
+            return false;
+        }
+        written += static_cast<std::size_t>(count);
+    }
+    const bool synced = ::fsync(fd) == 0;
+    const bool closed = ::close(fd) == 0;
+    const bool ok = synced && closed;
+    if (!ok) {
+        std::error_code ec;
+        std::filesystem::remove(output, ec);
+    }
+    return ok;
+}
+
+void SyncDirectory(const std::filesystem::path& directory) {
+    const int fd = ::open(directory.c_str(), O_RDONLY | O_DIRECTORY);
+    if (fd >= 0) {
+        (void)::fsync(fd);
+        (void)::close(fd);
+    }
+}
+} // namespace
+
+Config::Error Config::LastError() {
+    std::lock_guard lock(ConfigErrorMutex());
+    return LastConfigError();
+}
+
+const char* Config::ErrorCodeName(ErrorCode code) {
+    switch (code) {
+    case ErrorCode::None: return "none";
+    case ErrorCode::InvalidProfileName: return "invalid_profile_name";
+    case ErrorCode::MissingProfile: return "missing_profile";
+    case ErrorCode::ParseFailed: return "parse_failed";
+    case ErrorCode::InvalidShape: return "invalid_shape";
+    case ErrorCode::FutureSchema: return "future_schema";
+    case ErrorCode::MigrationFailed: return "migration_failed";
+    case ErrorCode::ReadFailed: return "read_failed";
+    case ErrorCode::WriteFailed: return "write_failed";
+    }
+    return "unknown";
+}
+
+void Config::SetWriteFailureForTesting(bool fail) {
+    std::lock_guard lock(Mutex());
+    FailWritesForTesting() = fail;
+}
+
+bool Config::ShouldFailWritesForTesting() { return FailWritesForTesting(); }
+
+void Config::SetError(ErrorCode code, std::string message) {
+    std::lock_guard lock(ConfigErrorMutex());
+    LastConfigError() = {code, std::move(message)};
+}
+
+bool Config::ValidateAndNormalize(json& data, ErrorCode& code, std::string& error, bool& migrated) {
+	code = ErrorCode::InvalidShape;
+    if (!data.is_object()) {
+        error = "The profile root must be an object.";
+        return false;
+    }
+    std::uint64_t version = 0;
+    if (data.contains("schema_version")) {
+        if (!data["schema_version"].is_number_integer()) {
+            error = "The profile schema version is invalid.";
+            return false;
+        }
+        if (data["schema_version"].is_number_unsigned())
+            version = data["schema_version"].get<std::uint64_t>();
+        else {
+            const auto signed_version = data["schema_version"].get<std::int64_t>();
+            if (signed_version < 0) {
+                error = "The profile schema version is invalid.";
+                return false;
+            }
+            version = static_cast<std::uint64_t>(signed_version);
+        }
+    }
+    if (version > static_cast<std::uint64_t>(SchemaVersion())) {
+		code = ErrorCode::FutureSchema;
+        error = "This profile was created by a newer version and was not changed.";
+        return false;
+    }
+
+    // Version 0 was the historical unversioned flat/nested profile. Version 1
+    // introduced profiles but no semantic field changes. Both migrate by
+    // adding the explicit current version while retaining unknown fields.
+    migrated = version != static_cast<std::uint64_t>(SchemaVersion());
+    data["schema_version"] = SchemaVersion();
+    const json schema = BuildCurrentJson(json::object());
+    return ValidateKnownValues(data, schema, error);
+}
+
+bool Config::AtomicWrite(const std::string& path, const std::string& content, bool backup_existing) {
+    if (ShouldFailWritesForTesting()) {
+        SetError(ErrorCode::WriteFailed, "The profile could not be written; the previous file was kept.");
+        return false;
+    }
+    const std::filesystem::path target(path);
+    std::error_code ec;
+    if (std::filesystem::is_symlink(target, ec)) {
+        SetError(ErrorCode::WriteFailed, "The profile destination is unsafe.");
+        return false;
+    }
+    const auto parent = target.parent_path();
+    if (!std::filesystem::exists(parent, ec) || ec) {
+        SetError(ErrorCode::WriteFailed, "The profile directory is unavailable.");
+        return false;
+    }
+
+    std::filesystem::path temporary;
+    if (!WriteDurableTemporary(parent, target.filename().string(), content, temporary)) {
+        SetError(ErrorCode::WriteFailed, "The profile could not be written; the previous file was kept.");
+        return false;
+    }
+
+    const bool exists = std::filesystem::exists(target, ec) && !ec;
+    if (backup_existing && exists) {
+        const auto backup = parent / (target.filename().string() + ".bak");
+        std::ifstream input(target, std::ios::binary);
+        const std::string previous((std::istreambuf_iterator<char>(input)), {});
+        std::filesystem::path backup_temp;
+        if ((!input.good() && !input.eof()) || !WriteDurableTemporary(parent, backup.filename().string(), previous, backup_temp)) {
+            std::filesystem::remove(temporary, ec);
+            SetError(ErrorCode::WriteFailed, "The profile backup could not be created; the previous file was kept.");
+            return false;
+        }
+        std::filesystem::rename(backup_temp, backup, ec);
+        if (ec) {
+            std::filesystem::remove(backup_temp, ec);
+            std::filesystem::remove(temporary, ec);
+            SetError(ErrorCode::WriteFailed, "The profile backup could not be created; the previous file was kept.");
+            return false;
+        }
+		SyncDirectory(parent);
+    }
+    std::filesystem::rename(temporary, target, ec);
+    if (ec) {
+        std::filesystem::remove(temporary, ec);
+        SetError(ErrorCode::WriteFailed, "The profile could not be replaced; the previous file was kept.");
+        return false;
+    }
+    SyncDirectory(parent);
+    return true;
+}
+
 // Sanitise a profile name into a safe filename component. Strips path
 // separators and any character that could escape the configs/ directory, so a
 // hostile or accidental name can never read/write outside of it. Returns "" for
@@ -169,8 +396,11 @@ bool Config::ReadImpl(const std::string& path) {
 	std::ifstream f(path);
 
 	if (!f.good()) {
-		LOGF(INFO, "Configuration file does not exist; creating defaults");
-		WriteImpl(path);
+		if (WriteImpl(path)) {
+			SetError(ErrorCode::None, "");
+			LOGF(INFO, "Configuration file does not exist; created defaults");
+			return true;
+		}
 		return false;
 	}
 
@@ -179,13 +409,19 @@ bool Config::ReadImpl(const std::string& path) {
 		data = json::parse(f);
 	}
 	catch (const std::exception& e) {
-		LOGF(WARNING, "Failed to parse configuration file ({}); restoring defaults", e.what());
-		WriteImpl(path);
+		SetError(ErrorCode::ParseFailed, "The profile is malformed; the previous settings were kept.");
+		LOGF(WARNING, "Failed to parse configuration file ({}); keeping active settings", e.what());
 		return false;
 	}
 
-	if (data.empty())
+	bool migrated = false;
+	std::string validation_error;
+	ErrorCode validation_code;
+	if (!ValidateAndNormalize(data, validation_code, validation_error, migrated)) {
+		SetError(validation_code, validation_error);
+		LOGF(WARNING, "Refusing configuration profile: {}", validation_error);
 		return false;
+	}
 
 	try {
 		// general
@@ -214,19 +450,41 @@ bool Config::ReadImpl(const std::string& path) {
 		cfg::esp::bomb = data["esp"].value("bomb", true);
 
 		// bullet tracer
-		if (data["esp"].contains("bullet_tracer")) {
-			const auto& bt = data["esp"]["bullet_tracer"];
+		{
+			const auto object=data["esp"].value("bullet_tracer",json::object());
+			const auto bt=object.is_object()?object:json::object();
 			cfg::esp::bullet_tracer::enabled = bt.value("enabled", false);
-			cfg::esp::bullet_tracer::length = bt.value("length", 300.0f);
-			cfg::esp::bullet_tracer::duration = bt.value("duration", 5.0f);
+			cfg::esp::bullet_tracer::length = std::clamp(bt.value("length", 8192.0f),50.f,16384.f);
+			cfg::esp::bullet_tracer::duration = std::clamp(bt.value("duration", 1.25f),.1f,10.f);
 			cfg::esp::bullet_tracer::muzzle_offset = bt.value("muzzle_offset", 45.0f);
 			cfg::esp::bullet_tracer::thickness = bt.value("thickness", 1.5f);
+			cfg::esp::bullet_tracer::style = std::clamp(bt.value("style",0),0,2);
+			cfg::esp::bullet_tracer::glow = std::clamp(bt.value("glow",.65f),0.f,1.f);
+			cfg::esp::bullet_tracer::impact = bt.value("impact",true);
 			cfg::esp::bullet_tracer::team = JsonToColor(bt, "team", { 0.f, 1.f, 0.5f, 0.6f });
 			cfg::esp::bullet_tracer::enemy = JsonToColor(bt, "enemy", { 1.f, 0.3f, 0.3f, 0.6f });
 		}
 		
 		// wireframe
+		{
+			namespace pw = cfg::esp::player_wireframe;
+			const auto object = data["esp"].value("player_wireframe", nlohmann::json::object());
+			const auto settings = object.is_object() ? object : nlohmann::json::object();
+			pw::enabled = settings.value("enabled", false);
+			pw::visible_only = settings.value("visible_only", false);
+			pw::detail = std::clamp(settings.value("detail", 1), 0, 2);
+			pw::opacity = std::clamp(settings.value("opacity", .8f), 0.f, 1.f);
+			pw::thickness = std::clamp(settings.value("thickness", 1.f), 1.f, 3.f);
+			pw::max_distance = std::clamp(settings.value("max_distance", 3000.f), 100.f, 10000.f);
+			pw::visible = JsonToColor(settings, "visible", {.65f,.86f,.72f,1.f});
+			pw::blocked = JsonToColor(settings, "blocked", {.85f,.48f,.42f,1.f});
+			pw::unknown = JsonToColor(settings, "unknown", {.55f,.58f,.62f,1.f});
+		}
 		cfg::esp::wireframe = data["esp"].value("wireframe", false);
+		cfg::esp::wireframe_mode = std::clamp(data["esp"].value("wireframe_mode", 0), 0, 1);
+		cfg::esp::wireframe_full_xray = data["esp"].value("wireframe_full_xray", false);
+		cfg::esp::wireframe_panel_opacity = std::clamp(data["esp"].value("wireframe_panel_opacity", .10f), 0.f, .35f);
+		// Ignore legacy wireframe_occlude_game: its forced opaque fill hid the game.
 		cfg::esp::wireframe_max_dist = data["esp"].value("wireframe_max_dist", 3000.0f);
 		cfg::esp::wireframe_budget = std::clamp(data["esp"].value("wireframe_budget", 6000), 500, 8000);
 		cfg::esp::wireframe_opacity = std::clamp(data["esp"].value("wireframe_opacity", 0.65f), 0.0f, 1.0f);
@@ -427,22 +685,35 @@ bool Config::ReadImpl(const std::string& path) {
 			cfg::sound_esp::gunshots_color = JsonToColor(se, "gunshots_color", { 1.f, 0.3f, 0.3f, 0.9f });
 		}
 
+		// capture
+		if (data.contains("capture")) {
+			const auto& cap = data["capture"];
+			cfg::capture::fps = cap.value("fps", 60);
+			if (cfg::capture::fps < 1)
+				cfg::capture::fps = 1;
+			if (cfg::capture::fps > 240)
+				cfg::capture::fps = 240;
+			cfg::capture::output_dir = cap.value("output_dir", std::string("captures"));
+			if (cfg::capture::output_dir.empty())
+				cfg::capture::output_dir = "captures";
+		}
+
 	}
 	catch (const std::exception& e) {
-		LOGF(WARNING, "Invalid configuration value ({}); restoring defaults", e.what());
-		WriteImpl(path);
+		SetError(ErrorCode::InvalidShape, "A configuration value could not be applied; active settings were kept.");
+		LOGF(WARNING, "Invalid configuration value ({}); keeping active settings", e.what());
 		return false;
 	}
 
+	if (migrated && !WriteImpl(path))
+		return false;
+	SetError(ErrorCode::None, "");
 	LOGF(INFO, "Successfully parsed configuration");
 	return true;
 }
 
-bool Config::WriteImpl(const std::string& path) {
-	EnsureConfigDir();
-	std::ofstream f(path);
-
-	json data;
+json Config::BuildCurrentJson(json data) {
+	data["schema_version"] = SchemaVersion();
 
 	data["enabled"] = cfg::enabled;
 
@@ -474,11 +745,30 @@ bool Config::WriteImpl(const std::string& path) {
 	data["esp"]["bullet_tracer"]["duration"] = cfg::esp::bullet_tracer::duration;
 	data["esp"]["bullet_tracer"]["muzzle_offset"] = cfg::esp::bullet_tracer::muzzle_offset;
 	data["esp"]["bullet_tracer"]["thickness"] = cfg::esp::bullet_tracer::thickness;
+	data["esp"]["bullet_tracer"]["style"] = cfg::esp::bullet_tracer::style;
+	data["esp"]["bullet_tracer"]["glow"] = cfg::esp::bullet_tracer::glow;
+	data["esp"]["bullet_tracer"]["impact"] = cfg::esp::bullet_tracer::impact;
 	ColorToJson(data["esp"]["bullet_tracer"], "team", cfg::esp::bullet_tracer::team);
 	ColorToJson(data["esp"]["bullet_tracer"], "enemy", cfg::esp::bullet_tracer::enemy);
 
 	// wireframe
+	{
+		namespace pw = cfg::esp::player_wireframe;
+		auto& settings = data["esp"]["player_wireframe"];
+		settings["enabled"] = pw::enabled;
+		settings["visible_only"] = pw::visible_only;
+		settings["detail"] = pw::detail;
+		settings["opacity"] = pw::opacity;
+		settings["thickness"] = pw::thickness;
+		settings["max_distance"] = pw::max_distance;
+		ColorToJson(settings, "visible", pw::visible);
+		ColorToJson(settings, "blocked", pw::blocked);
+		ColorToJson(settings, "unknown", pw::unknown);
+	}
 	data["esp"]["wireframe"] = cfg::esp::wireframe;
+	data["esp"]["wireframe_mode"] = cfg::esp::wireframe_mode;
+	data["esp"]["wireframe_full_xray"] = cfg::esp::wireframe_full_xray;
+	data["esp"]["wireframe_panel_opacity"] = cfg::esp::wireframe_panel_opacity;
 	data["esp"]["wireframe_max_dist"] = cfg::esp::wireframe_max_dist;
 	data["esp"]["wireframe_budget"] = cfg::esp::wireframe_budget;
 	data["esp"]["wireframe_opacity"] = cfg::esp::wireframe_opacity;
@@ -658,12 +948,49 @@ bool Config::WriteImpl(const std::string& path) {
 	ColorToJson(data["sound_esp"], "footsteps_color", cfg::sound_esp::footsteps_color);
 	ColorToJson(data["sound_esp"], "gunshots_color", cfg::sound_esp::gunshots_color);
 
-	f << std::setw(4) << data << std::endl;
-	f.close();
+	// capture
+	data["capture"]["fps"] = cfg::capture::fps;
+	data["capture"]["output_dir"] = cfg::capture::output_dir;
 
-	LOGF(VERBOSE, "Writing configuration to file");
+	// Retire the old opaque map-fill setting permanently.  It is intentionally
+	// ignored on load and must not survive a save through unknown-field merging.
+	if (data.contains("esp") && data["esp"].is_object())
+		data["esp"].erase("wireframe_occlude_game");
+	return data;
+}
 
-	return true;
+bool Config::WriteImpl(const std::string& path) {
+	if (!EnsureConfigDir()) {
+		SetError(ErrorCode::WriteFailed, "The profile directory could not be created.");
+		return false;
+	}
+
+	json data = json::object();
+	std::ifstream existing(path, std::ios::binary);
+	if (existing.good()) {
+		try {
+			data = json::parse(existing);
+			bool ignored_migration = false;
+			ErrorCode validation_code;
+			std::string error;
+			if (!ValidateAndNormalize(data, validation_code, error, ignored_migration)) {
+				SetError(ErrorCode::WriteFailed, "The existing profile is invalid and was not overwritten.");
+				return false;
+			}
+		}
+		catch (const std::exception&) {
+			SetError(ErrorCode::WriteFailed, "The existing profile is malformed and was not overwritten.");
+			return false;
+		}
+	}
+
+	data = BuildCurrentJson(std::move(data));
+	const bool ok = AtomicWrite(path, data.dump(4) + "\n", true);
+	if (ok) {
+		SetError(ErrorCode::None, "");
+		LOGF(VERBOSE, "Writing configuration to file");
+	}
+	return ok;
 }
 
 

@@ -23,10 +23,10 @@ public:
     static uintptr_t ResolveHandle(uintptr_t entity_list, std::uint32_t handle);
 
 public:
-    view_matrix_t view_matrix;
+    view_matrix_t view_matrix{};
 
-    uintptr_t entity_list;        // Global entity list base (bucket-pointer array on Linux)
-    uintptr_t list_entry;         // Bucket 0 of the global entity list (*(entity_list + 0x0))
+    uintptr_t entity_list{};        // Global entity list base (bucket-pointer array on Linux)
+    uintptr_t list_entry{};         // Bucket 0 of the global entity list (*(entity_list + 0x0))
 private:
-    uintptr_t address;
+    uintptr_t address{};
 };

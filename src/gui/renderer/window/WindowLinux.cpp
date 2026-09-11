@@ -1,5 +1,7 @@
 #ifndef _WIN32
 #include "Window.hpp"
+#include "gui/renderer/FullMapRenderer.hpp"
+#include "core/engine/cache/Cache.hpp"
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -338,6 +340,8 @@ bool Window::SpawnWindow() {
         LOGF(WARNING, "[window] preferred backend unavailable; fell back to the other one");
     }
     glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
+    glfwWindowHint(GLFW_ALPHA_BITS, 8);
+    glfwWindowHint(GLFW_DEPTH_BITS, 24);
     glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
     glfwWindowHint(GLFW_FLOATING, GLFW_TRUE);
     glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_FALSE);
@@ -424,6 +428,7 @@ bool Window::CreateImGui() {
 }
 
 void Window::DestroyImGui() {
+    FullMapRenderer::Destroy();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -453,8 +458,15 @@ void Window::EndRender() {
     int width{}, height{};
     glfwGetFramebufferSize(hwnd, &width, &height);
     glViewport(0, 0, width, height);
+    glDisable(GL_SCISSOR_TEST);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glClearColor(0.f, 0.f, 0.f, 0.f);
     glClear(GL_COLOR_BUFFER_BIT);
+    if(cfg::enabled&&cfg::esp::wireframe&&cfg::esp::wireframe_mode==1) {
+        const auto snapshot=Cache::CopySnapshot();
+        if(snapshot.status.ready()) FullMapRenderer::Render(snapshot.game.view_matrix);
+        // Retain uploaded geometry during short data gaps; don't draw stale frames.
+    } else FullMapRenderer::Destroy();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     glfwSwapBuffers(hwnd);
 }

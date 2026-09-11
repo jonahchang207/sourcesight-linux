@@ -4,6 +4,8 @@
 #include <vector>
 #include <cstdint>
 #include <atomic>
+#include <span>
+#include <memory>
 
 // Robust external visibility check for CS2 using map collision geometry.
 //
@@ -64,6 +66,20 @@ void SetDesiredMap(const std::string& map_name);
 // Returns true if the path is CLEAR (visible), false if blocked.
 bool IsVisible(const Vec3& origin, const Vec3& target);
 
+enum class Visibility { Unknown, Visible, Blocked };
+struct RayHit {
+    bool ready = false;
+    bool hit = false;
+    float distance = 0;
+    Vec3 point{};
+};
+// Nearest intersection on a finite segment; one immutable geometry snapshot.
+RayHit TraceSegment(const Vec3& origin, const Vec3& target);
+// All targets use one immutable map snapshot. Missing geometry or invalid rays
+// are Unknown, unlike the legacy fail-open IsVisible API used by aiming.
+void ClassifyVisibility(const Vec3& origin, std::span<const Vec3> targets,
+                        std::span<Visibility> results);
+
 // Get the name of the currently loaded map (empty if none).
 std::string CurrentMap();
 
@@ -72,6 +88,9 @@ bool IsReady();
 
 // Safe metadata access; mesh storage never escapes its immutable snapshot.
 size_t TriangleCount();
+ AABB WorldBounds();
+// Aliasing shared_ptr pins the immutable geometry for GPU upload/readers.
+std::shared_ptr<const std::vector<Triangle>> MeshSnapshot();
 
 // Debug: Render wireframe of collision mesh.
 void RenderWireframe(view_matrix_t& matrix, const ImGuiIO& io, ImDrawList* d, const Vec3_t& camera_pos);

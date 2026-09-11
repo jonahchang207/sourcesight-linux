@@ -75,6 +75,9 @@
     <ClCompile Include="gui\renderer\Renderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="gui\renderer\capture\ScreenCapture.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="gui\frontend\menu\Menu.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -324,6 +327,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="gui\renderer\Renderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="gui\renderer\capture\ScreenCapture.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="gui\frontend\menu\Menu.hpp">

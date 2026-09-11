@@ -1,98 +1,12 @@
 #include "Esp.hpp"
 #include "SoundEsp.hpp"
+#include "PlayerWireframe.hpp"
 
 #include "core/input/MouseAim.hpp"
 #include "core/engine/classes/MapRaytrace.hpp"
 #include "gui/renderer/Renderer.hpp"
 #include "assets/fonts/WeaponIcons.h"
 #include "assets/fonts/Icons.h"
-
-#include <limits>
-#include <numbers>
-
-namespace {
-
-// Source engine AngleVectors: yaw 0 faces +X, pitch up is negative.
-Vec3_t AngleToDirection(const Vec3_t& angles) {
-    const float pitch = angles.x * (std::numbers::pi_v<float> / 180.0f);
-    const float yaw = angles.y * (std::numbers::pi_v<float> / 180.0f);
-    return Vec3_t(
-        std::cos(pitch) * std::cos(yaw),
-        std::cos(pitch) * std::sin(yaw),
-        -std::sin(pitch)
-    ).normalized();
-}
-
-// Ray vs. axis-aligned box (slab method). Returns the entry distance t along
-// the ray, or -1 when there is no hit. A hit at t == 0 means the origin is
-// already inside the box.
-float RayBox(const Vec3_t& origin, const Vec3_t& dir, const Vec3_t& center,
-             const Vec3_t& half) {
-    float tmin = 0.0f;
-    float tmax = std::numeric_limits<float>::infinity();
-    for (int axis = 0; axis < 3; ++axis) {
-        const float o = origin.at(axis) - center.at(axis);
-        const float d = dir.at(axis);
-        if (std::fabs(d) < 1e-6f) {
-            if (o < -half.at(axis) || o > half.at(axis))
-                return -1.0f;
-        }
-        else {
-            float t1 = (-half.at(axis) - o) / d;
-            float t2 = (half.at(axis) - o) / d;
-            if (t1 > t2)
-                std::swap(t1, t2);
-            tmin = std::max(tmin, t1);
-            tmax = std::min(tmax, t2);
-            if (tmin > tmax)
-                return -1.0f;
-        }
-    }
-    return std::max(0.0f, tmin);
-}
-
-// Approximate the muzzle position: the midpoint of the two hand bones (the
-// weapon grip) extended forward along the aim direction. Falls back to the
-// eye position when the skeleton is unavailable.
-Vec3_t GunTip(const Player& player) {
-    const Vec3_t forward = AngleToDirection(player.eye_angles);
-    const float muzzle = std::clamp(cfg::esp::bullet_tracer::muzzle_offset, 0.0f, 200.0f);
-    Vec3_t grip = player.pos + Vec3_t(0.f, 0.f, 64.f);
-    if (player.bone_list.size() > static_cast<size_t>(bone_index::hand_R)) {
-        grip = (player.bone_list[bone_index::hand_L].pos
-                + player.bone_list[bone_index::hand_R].pos) * 0.5f;
-    }
-    // Slight rightward bias: the weapon sits on the right side of the model.
-    const float yaw = player.eye_angles.y * (std::numbers::pi_v<float> / 180.0f);
-    const Vec3_t right(-std::sin(yaw), std::cos(yaw), 0.f);
-    return grip + forward * muzzle + right * 6.f;
-}
-
-// Trace a shot along ``dir`` and return the first enemy player hit (the
-// shooter and their teammates excluded, the local player included as a valid
-// target), or the max-trace endpoint when the shot only hits the world.
-// Player boxes approximate the Source hull (32x32x72 world units, centred at
-// feet + 36 up). World geometry is not traceable from an external process.
-Vec3_t TraceShot(const Vec3_t& origin, const Vec3_t& dir, float max_len,
-                 const std::vector<Player>& players, int shooter_index,
-                 int shooter_team) {
-    float best_t = max_len;
-    for (const auto& target : players) {
-        if (!target.alive || target.index == shooter_index)
-            continue;
-        // Only the shooter's enemies block the bullet (CS2 bullets stop at
-        // enemy hitboxes); with no assigned team, keep every player.
-        if (shooter_team != 0 && target.team == shooter_team)
-            continue;
-        const Vec3_t center = target.pos + Vec3_t(0.f, 0.f, 36.f);
-        const float t = RayBox(origin, dir, center, Vec3_t(16.f, 16.f, 36.f));
-        if (t >= 0.0f && t < best_t)
-            best_t = t;
-    }
-    return origin + dir * best_t;
-}
-
-} // namespace
 
 bool Esp::Init() {
 	return GetInstance().InitImpl();
@@ -150,10 +64,16 @@ void Esp::RenderImpl() {
 		ImGui::IsKeyPressed(static_cast<ImGuiKey>(cfg::aim::toggle_key)))
 		cfg::aim::toggle_requested = true;
 
-	if (!cfg::enabled)
+	if (!cfg::enabled) {
+		bullet_trails.Clear();
 		return;
+	}
 
 	auto snapshot = Cache::CopySnapshot();
+	if (!snapshot.status.ready()) {
+		bullet_trails.Clear();
+		return;
+	}
 	auto& game = snapshot.game;
 	auto& bomb = snapshot.bomb;
 	auto& local = snapshot.local;
@@ -185,6 +105,18 @@ void Esp::RenderImpl() {
 			(game.view_matrix[3][3] != 0.0f));
 	}
 
+	// Keep world lines underneath the player visualization.
+	if (cfg::esp::wireframe && cfg::esp::wireframe_mode==0 && MapRaytrace::IsReady()) {
+		Vec3_t camera = local.pos;
+		PlayerWireframe::CameraPosition(this->matrix, camera);
+		MapRaytrace::RenderWireframe(this->matrix, this->io, this->d, camera);
+	}
+
+	// Detect all shooters (including local) once, independent of player-box filters.
+	bullet_trails.Update(players,local,ImGui::GetTime(),
+		std::string(globals.map_name,strnlen(globals.map_name,sizeof(globals.map_name))),globals.in_match);
+	bullet_trails.Render(this->matrix,this->io.DisplaySize,this->d,ImGui::GetTime());
+
 	for (auto& player : players) {
 		if (!player.alive)
 			continue;
@@ -209,18 +141,14 @@ void Esp::RenderImpl() {
 			continue;
 
 		RenderPlayerTracers(local, player, mate);
+		if (mate || !cfg::esp::spotted_only || player.spotted)
+			PlayerWireframe::Render(player, this->matrix, this->io.DisplaySize, this->d);
 		RenderPlayer(player, mate);
-		RenderBulletTracers(player, players, mate);
 	}
 
 	// Update and render sound ESP (footsteps, gunshots)
 	SoundEsp::Update(players, local);
 	SoundEsp::Render(this->matrix, this->io, this->d, local);
-
-	// Render map collision wireframe (debug)
-	if (cfg::esp::wireframe && MapRaytrace::IsReady()) {
-		MapRaytrace::RenderWireframe(this->matrix, this->io, this->d, local.pos);
-	}
 
 	RenderCrosshair(local);
 	RenderBombBox(bomb);
@@ -761,77 +689,6 @@ void Esp::RenderPlayerTracers(Player source, Player player, bool mate) {
 	);
 }
 
-void Esp::RenderBulletTracers(Player player, const std::vector<Player>& players, bool mate) {
-	if (!cfg::esp::bullet_tracer::enabled)
-		return;
-
-	const float now = static_cast<float>(ImGui::GetTime());
-
-	// Detect a new shot: clip ammo dropped since the last frame we saw this
-	// player. The first observation only seeds the baseline (no phantom). A
-	// weapon switch also changes clip ammo, so it must not count as a shot.
-	auto& prev = last_ammo[player.index];
-	const bool same_weapon = prev.second == player.weapon.item_index;
-	const bool ammo_dropped = same_weapon && player.ammo >= 0 && prev.first > player.ammo;
-	prev = { player.ammo, player.weapon.item_index };
-
-	if (ammo_dropped) {
-		// Freeze the full segment at fire time: from the gun tip to the first
-		// player hit (or the max trace distance when only the world is hit).
-		const Vec3_t origin = GunTip(player);
-		const Vec3_t dir = AngleToDirection(player.eye_angles);
-		const float max_len = std::max(1.0f, cfg::esp::bullet_tracer::length);
-		const Vec3_t end = TraceShot(origin, dir, max_len, players, player.index, player.team);
-
-		// Bound the buffer: automatic fire at 5 s lifetime must not grow forever.
-		if (tracers.size() >= 256)
-			tracers.erase(tracers.begin());
-		tracers.push_back({ origin, end, now, mate, player.localplayer });
-
-		// Add gunshot sound event for sound ESP
-		SoundEsp::AddGunshot(origin, !mate);
-	}
-
-	// Render and expire active tracers, fading only in the final moments.
-	const float duration = std::max(0.1f, cfg::esp::bullet_tracer::duration);
-	const float thickness = std::clamp(cfg::esp::bullet_tracer::thickness, 1.0f, 4.0f);
-	const float fade_tail = std::min(0.5f, duration * 0.25f);
-
-	for (auto it = tracers.begin(); it != tracers.end();) {
-		const float age = now - it->start_time;
-		if (age > duration) {
-			it = tracers.erase(it);
-			continue;
-		}
-
-		// Line-of-sight gate: only show shots whose shooter we can actually
-		// see on screen (in front of the camera and inside the view frustum).
-		// Our own gun is always in view. World geometry is not traceable from
-		// an external process, so this is the practical visibility proxy.
-		if (!it->from_local) {
-			Vec2_t visible;
-			if (!matrix.wts(it->origin, io.DisplaySize, visible)) {
-				++it;
-				continue;
-			}
-		}
-
-		Vec2_t a, b;
-		// The endpoint may legitimately leave the screen; only the start is
-		// required to stay on-screen.
-		if (matrix.wts(it->origin, io.DisplaySize, a, false) &&
-			matrix.wts(it->end, io.DisplaySize, b, false)) {
-			auto color = it->mate ? cfg::esp::bullet_tracer::team : cfg::esp::bullet_tracer::enemy;
-			// Single pass: cheap to draw, no glow layering.
-			float alpha = 1.0f;
-			if (age > duration - fade_tail)
-				alpha = (duration - age) / fade_tail;
-			color.a *= alpha;
-			d->AddLine(a, b, ImColor(color), thickness);
-		}
-		++it;
-	}
-}
 
 void Esp::RenderAimFov() {
 	// FOV ring: only drawn when aim is enabled.  Shows the acquisition

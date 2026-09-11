@@ -1,6 +1,7 @@
 #include "MapRaytrace.hpp"
 #include "common.hpp"
 #include "config/Current.hpp"
+#include "gui/renderer/WireframeLines.hpp"
 
 #include <fstream>
 #include <algorithm>
@@ -25,6 +26,7 @@ void FreeKDTree(MapRaytrace::KDNode* node);
 struct Geometry {
     std::string name;
     std::vector<MapRaytrace::Triangle> triangles;
+    std::vector<MapRaytrace::AABB> triangle_bounds;
     MapRaytrace::KDNode* root = nullptr;
     ~Geometry() { FreeKDTree(root); }
 };
@@ -302,6 +304,8 @@ bool MapRaytrace::LoadMap(const std::string& map_name) {
     auto& triangles = geometry->triangles;
     std::erase_if(triangles, [&](const Triangle& t){return !valid(t);});
     if (triangles.empty()) return false;
+    geometry->triangle_bounds.reserve(triangles.size());
+    for (const auto& triangle : triangles) geometry->triangle_bounds.push_back(ComputeBounds(triangle));
     std::vector<uint32_t> indices(triangles.size());
     std::iota(indices.begin(), indices.end(), 0u);
     geometry->root = BuildKDTree(triangles, indices, 0);
@@ -341,6 +345,61 @@ bool MapRaytrace::IsVisible(const Vec3& origin, const Vec3& target) {
     return !TraverseKDTree(geometry->triangles, geometry->root, origin, dir, inv, length);
 }
 
+void MapRaytrace::ClassifyVisibility(const Vec3& origin, std::span<const Vec3> targets,
+                                    std::span<Visibility> results) {
+    std::fill(results.begin(), results.end(), Visibility::Unknown);
+    const auto geometry = g_geometry.load();
+    if (!geometry || !std::isfinite(origin.x) || !std::isfinite(origin.y) || !std::isfinite(origin.z)) return;
+    const size_t count = std::min(targets.size(), results.size());
+    for (size_t i = 0; i < count; ++i) {
+        const auto& target = targets[i];
+        Vec3 dir{target.x-origin.x, target.y-origin.y, target.z-origin.z};
+        const float length = std::sqrt(dir.x*dir.x + dir.y*dir.y + dir.z*dir.z);
+        if (!std::isfinite(length) || length < EPSILON) continue;
+        dir.x /= length; dir.y /= length; dir.z /= length;
+        const Vec3 inv{std::abs(dir.x)<EPSILON?1e30f:1/dir.x,
+                       std::abs(dir.y)<EPSILON?1e30f:1/dir.y,
+                       std::abs(dir.z)<EPSILON?1e30f:1/dir.z};
+        results[i] = TraverseKDTree(geometry->triangles, geometry->root, origin, dir, inv, length)
+            ? Visibility::Blocked : Visibility::Visible;
+    }
+}
+
+MapRaytrace::RayHit MapRaytrace::TraceSegment(const Vec3& origin, const Vec3& target) {
+    RayHit result;
+    const auto geometry = g_geometry.load();
+    if (!geometry) return result;
+    Vec3 dir{target.x-origin.x,target.y-origin.y,target.z-origin.z};
+    float nearest=std::sqrt(dir.x*dir.x+dir.y*dir.y+dir.z*dir.z);
+    if (!std::isfinite(origin.x) || !std::isfinite(origin.y) || !std::isfinite(origin.z) ||
+        !std::isfinite(nearest) || nearest<EPSILON) return result;
+    result.ready=true;
+    dir.x/=nearest; dir.y/=nearest; dir.z/=nearest;
+    const Vec3 inv{std::abs(dir.x)<EPSILON?1e30f:1/dir.x,
+                   std::abs(dir.y)<EPSILON?1e30f:1/dir.y,
+                   std::abs(dir.z)<EPSILON?1e30f:1/dir.z};
+    auto visit=[&](auto&& self,const KDNode* node)->void {
+        float entry,exit;
+        if(!node || !RayAABBIntersect(origin,inv,node->bbox,entry,exit) || entry>nearest) return;
+        for(auto id:node->triangle_indices) {
+            float distance;
+            if(RayTriangleIntersect(origin,dir,geometry->triangles[id],distance) && distance<=nearest) {
+                nearest=distance; result.hit=true;
+            }
+        }
+        auto* first=node->left;auto* second=node->right;
+        float left_entry=std::numeric_limits<float>::max(),right_entry=left_entry,unused;
+        if(first) RayAABBIntersect(origin,inv,first->bbox,left_entry,unused);
+        if(second) RayAABBIntersect(origin,inv,second->bbox,right_entry,unused);
+        if(right_entry<left_entry) std::swap(first,second);
+        self(self,first);self(self,second);
+    };
+    visit(visit,geometry->root);
+    result.distance=nearest;
+    result.point={origin.x+dir.x*nearest,origin.y+dir.y*nearest,origin.z+dir.z*nearest};
+    return result;
+}
+
 std::string MapRaytrace::CurrentMap() {
     const auto geometry = g_geometry.load();
     return geometry ? geometry->name : "";
@@ -353,9 +412,21 @@ size_t MapRaytrace::TriangleCount() {
     return geometry ? geometry->triangles.size() : 0;
 }
 
+MapRaytrace::AABB MapRaytrace::WorldBounds() {
+    const auto geometry=g_geometry.load();
+    return geometry&&geometry->root ? geometry->root->bbox : AABB{{0,0,0},{0,0,0}};
+}
+
+std::shared_ptr<const std::vector<MapRaytrace::Triangle>> MapRaytrace::MeshSnapshot() {
+    const auto geometry=g_geometry.load();
+    return geometry ? std::shared_ptr<const std::vector<Triangle>>(geometry,&geometry->triangles) : nullptr;
+}
+
 void MapRaytrace::RenderWireframe(view_matrix_t& matrix, const ImGuiIO& io, ImDrawList* d, const Vec3_t& camera_pos) {
     const auto geometry = g_geometry.load();
-    if (!geometry || !d || io.DisplaySize.x <= 0 || io.DisplaySize.y <= 0) return;
+    if (!geometry || !d || !std::isfinite(io.DisplaySize.x) || !std::isfinite(io.DisplaySize.y) ||
+        io.DisplaySize.x <= 0 || io.DisplaySize.y <= 0 || !std::isfinite(camera_pos.x) ||
+        !std::isfinite(camera_pos.y) || !std::isfinite(camera_pos.z)) return;
     for (auto& row : matrix.matrix)
         for (float value : row) if (!std::isfinite(value)) return;
     const float radius = std::clamp(cfg::esp::wireframe_max_dist,100.0f,10000.0f);
@@ -374,15 +445,22 @@ void MapRaytrace::RenderWireframe(view_matrix_t& matrix, const ImGuiIO& io, ImDr
                     matrix[3][0]*p.x+matrix[3][1]*p.y+matrix[3][2]*p.z+matrix[3][3]};
     };
     auto planes = [](Clip p) { return std::array<float,5>{p.w-.01f,p.w+p.x,p.w-p.x,p.w+p.y,p.w-p.y}; };
+    // Extract five world-space clip planes once, then test each box's support
+    // vertex instead of projecting all eight corners for every visited node.
+    std::array<std::array<float,4>,5> frustum;
+    for(int j=0;j<4;++j) {
+        frustum[0][j]=matrix[3][j];
+        frustum[1][j]=matrix[3][j]+matrix[0][j];
+        frustum[2][j]=matrix[3][j]-matrix[0][j];
+        frustum[3][j]=matrix[3][j]+matrix[1][j];
+        frustum[4][j]=matrix[3][j]-matrix[1][j];
+    }
+    frustum[0][3]-=.01f;
     auto outside = [&](const AABB& box) {
-        unsigned mask=31;
-        for(int i=0;i<8;++i) {
-            auto p=project({i&1?box.max.x:box.min.x,i&2?box.max.y:box.min.y,i&4?box.max.z:box.min.z});
-            auto f=planes(p); unsigned out=0;
-            for(int j=0;j<5;++j) if(f[j]<0) out|=1u<<j;
-            mask &= out;
-        }
-        return mask != 0;
+        for(const auto& p:frustum)
+            if(p[0]*(p[0]>=0?box.max.x:box.min.x)+p[1]*(p[1]>=0?box.max.y:box.min.y)+
+               p[2]*(p[2]>=0?box.max.z:box.min.z)+p[3]<0) return true;
+        return false;
     };
     // Bound draw-list growth and prioritize nearby nodes when the budget is reached.
     const float opacity = std::clamp(cfg::esp::wireframe_opacity, 0.f, 1.f);
@@ -392,8 +470,10 @@ void MapRaytrace::RenderWireframe(view_matrix_t& matrix, const ImGuiIO& io, ImDr
     const ImU32 rgb = ImGui::ColorConvertFloat4ToU32(tint) & ~IM_COL32_A_MASK;
     int remaining=std::clamp(cfg::esp::wireframe_budget, 500, 8000);
     int candidates_left=remaining*8;
+    std::array<WireframeLines::Line,8000> lines;
+    size_t line_count=0;
     auto edge = [&](Clip a, Clip b, ImU32 color) {
-        if (!remaining) return;
+        if (!remaining || !(color & IM_COL32_A_MASK)) return;
         float lo=0,hi=1;
         auto fa=planes(a),fb=planes(b);
         for(int i=0;i<5;++i) {
@@ -407,7 +487,7 @@ void MapRaytrace::RenderWireframe(view_matrix_t& matrix, const ImGuiIO& io, ImDr
             return ImVec2((1+(a.x+(b.x-a.x)*t)/w)*io.DisplaySize.x*.5f,
                           (1-(a.y+(b.y-a.y)*t)/w)*io.DisplaySize.y*.5f);
         };
-        d->AddLine(screen(lo),screen(hi),color,1.0f);
+        lines[line_count++]={screen(lo),screen(hi),color};
         --remaining;
     };
     auto visit = [&](auto&& self, const KDNode* node) -> void {
@@ -416,7 +496,7 @@ void MapRaytrace::RenderWireframe(view_matrix_t& matrix, const ImGuiIO& io, ImDr
             for(auto id:node->triangle_indices) {
                 if(!candidates_left--) { candidates_left=0; break; }
                 const auto& t=geometry->triangles[id];
-                const float dist2=distance2(ComputeBounds(t));
+                const float dist2=distance2(geometry->triangle_bounds[id]);
                 if(dist2>radius*radius) continue;
                 const int alpha=int(255*opacity*std::clamp(1-std::sqrt(dist2)/radius,.18f,1.f));
                 const auto a=project(t.p1),b=project(t.p2),c=project(t.p3);
@@ -432,5 +512,6 @@ void MapRaytrace::RenderWireframe(view_matrix_t& matrix, const ImGuiIO& io, ImDr
     };
     d->PushClipRect(ImVec2(0,0),io.DisplaySize,true);
     visit(visit,geometry->root);
+    WireframeLines::Draw(d,std::span(lines).first(line_count));
     d->PopClipRect();
 }

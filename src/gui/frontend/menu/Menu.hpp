@@ -39,6 +39,16 @@ public:
     static bool Init();
     static void Render();
 
+    // Used by the isolated offline preview. It keeps the real widget tree
+    // inspectable while disabling filesystem/network-adjacent menu actions.
+    static void SetPreviewMode(bool enabled);
+    static bool IsPreviewMode();
+    static int PreviewActiveTab();
+    static bool PreviewNavigateSearch(const char* query, int match_index = 0);
+    static void PreviewRequestVisualPreset(int preset);
+    static bool PreviewHasPendingVisualPreset();
+    static bool PreviewConfirmVisualPreset();
+
     static void RenderStartupHelp();
 
     static ImVec2 GetPos();
@@ -59,6 +69,9 @@ private:
     void SetupStyles();
 private:
     bool isSetup = true;
+    bool preview_mode = false;
+    int active_tab = 0;
+    int pending_visual_preset = -1;
 
     ImVec2 pos;
     ImVec2 size;

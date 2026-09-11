@@ -34,12 +34,14 @@ jobs:
       - name: Build
         run: cmake --build build --parallel "$(nproc)"
 
+      - name: Product-quality regression checks
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: node tools/check.mjs
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
           name: sourcesight-linux
           path: build/sourcesight
           if-no-files-found: error
-
-      - name: Geometry regression checks
-        run: node tools/test-map-geometry.mjs

@@ -6,6 +6,7 @@
 #include "gui/frontend/menu/Menu.hpp" // Circular dependency
 #include "gui/frontend/menu/Theme.hpp"
 #include "assets/fonts/WeaponIcons.h"
+#include "core/engine/classes/MapRaytrace.hpp"
 
 bool Overlays::Init() {
     return GetInstance().InitImpl();
@@ -66,6 +67,9 @@ void Overlays::RenderImpl() {
 
     }
     ImGui::PopFont();
+
+    // Keep application status visible, but never display stale world/player data.
+    if (!Cache::Status().ready()) return;
 
     ImGui::PushFont(this->font_alt);
     {

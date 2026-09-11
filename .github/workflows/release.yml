@@ -28,10 +28,14 @@ jobs:
           cmake --build build --parallel "$(nproc)"
 
       - name: Package
-        run: node scripts/package-release.mjs
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          node tools/check.mjs
+          node scripts/package-release.mjs
 
       - uses: actions/upload-artifact@v7
         with:
           name: sourcesight-linux-release
-          path: build/release/*
+          path: build/release/**/*
           if-no-files-found: error

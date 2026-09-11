@@ -34,7 +34,7 @@ list(APPEND APP_SOURCES
 
 add_executable(sourcesight ${APP_SOURCES})
 set_target_properties(sourcesight PROPERTIES OUTPUT_NAME "sourcesight")
-target_compile_definitions(sourcesight PRIVATE _GNU_SOURCE)
+target_compile_definitions(sourcesight PRIVATE _GNU_SOURCE SOURCESIGHT_VERSION="${PROJECT_VERSION}")
 target_compile_options(sourcesight PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(sourcesight PRIVATE src src/external src/external/imgui
     src/external/json/include

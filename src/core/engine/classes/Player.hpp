@@ -32,7 +32,7 @@ public:
     bool localplayer = false;
     bool has_c4 = false;
 
-    char name[32];
+    char name[32]{};
     //std::string name;
     uint64_t steam_id{};
 
@@ -47,11 +47,11 @@ public:
     std::uint32_t pawn_controller_addr{};
     ObserverServices observer_services;
 private:
-    uintptr_t list_entry;
-    uintptr_t entity_list;        // Global entity list (shared by controllers, pawns and weapons)
+    uintptr_t list_entry{};
+    uintptr_t entity_list{};        // Global entity list (shared by controllers, pawns and weapons)
 
-    uintptr_t pawn;
-    uintptr_t controller;
+    uintptr_t pawn{};
+    uintptr_t controller{};
     
     bone_data bones[30]{};
 private:

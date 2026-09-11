@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 namespace cfg {
 	inline bool enabled = true;
 
@@ -29,17 +31,35 @@ namespace cfg {
 
 		namespace bullet_tracer {
 			inline bool enabled = false;
-			inline float length = 300.0f;
-			inline float duration = 5.0f;
+			inline float length = 8192.0f;
+			inline float duration = 1.25f;
 			inline float muzzle_offset = 45.0f;
 			inline float thickness = 1.5f;
+			inline int style = 0; // Ion / Streak / Minimal
+			inline float glow = 0.65f;
+			inline bool impact = true;
 
 			inline color_t team{ 0.f, 1.f, 0.5f, 0.6f };
 			inline color_t enemy{ 1.f, 0.3f, 0.3f, 0.6f };
 		}
 
+		namespace player_wireframe {
+			inline bool enabled = false;
+			inline bool visible_only = false;
+			inline int detail = 1; // Standard / Detailed / Ultra, with screen-size LOD.
+			inline float opacity = 0.8f;
+			inline float thickness = 1.0f;
+			inline float max_distance = 3000.0f;
+			inline color_t visible{0.65f, 0.86f, 0.72f, 1.f};
+			inline color_t blocked{0.85f, 0.48f, 0.42f, 1.f};
+			inline color_t unknown{0.55f, 0.58f, 0.62f, 1.f};
+		}
+
 		// Debug wireframe of map collision geometry
 		inline bool wireframe = false;
+		inline int wireframe_mode = 0; // Overlay / translucent full-map GPU view.
+		inline bool wireframe_full_xray = false;
+		inline float wireframe_panel_opacity = 0.10f;
 		inline float wireframe_max_dist = 3000.0f;
 		inline int wireframe_budget = 6000;
 		inline float wireframe_opacity = 0.65f;
@@ -266,6 +286,12 @@ namespace cfg {
 		inline float footprint_size = 8.0f;
 		inline color_t footsteps_color{ 1.f, 1.f, 1.f, 0.8f };
 		inline color_t gunshots_color{ 1.f, 0.3f, 0.3f, 0.9f };
+	}
+
+	// Screen capture (game + overlay composited output).
+	namespace capture {
+		inline int fps = 60;                              // Video framerate for recordings.
+		inline std::string output_dir = "captures";       // Folder for screenshots/recordings.
 	}
 
 	// Not stored, just for testing

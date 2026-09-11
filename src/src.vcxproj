@@ -209,6 +209,7 @@
     <ClCompile Include="gui\frontend\menu\Menu.cpp" />
     <ClCompile Include="gui\frontend\overlays\Overlays.cpp" />
     <ClCompile Include="gui\renderer\Renderer.cpp" />
+    <ClCompile Include="gui\renderer\capture\ScreenCapture.cpp" />
     <ClCompile Include="gui\renderer\window\Window.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="updater\http\HttpHelper.cpp" />
@@ -307,6 +308,7 @@
     <ClInclude Include="gui\frontend\menu\Menu.hpp" />
     <ClInclude Include="gui\frontend\overlays\Overlays.hpp" />
     <ClInclude Include="gui\renderer\Renderer.hpp" />
+    <ClInclude Include="gui\renderer\capture\ScreenCapture.hpp" />
     <ClInclude Include="gui\renderer\window\Window.hpp" />
     <ClInclude Include="updater\http\HttpHelper.hpp" />
     <ClInclude Include="updater\Updater.hpp" />

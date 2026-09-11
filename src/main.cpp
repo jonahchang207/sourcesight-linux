@@ -75,6 +75,7 @@ int main()
     Renderer::Thread();
 
 exit:
+    Engine::Stop(); // Also covers renderer initialization failure; idempotent.
     LOGF(INFO, "That's it, I'm done. Hope you had a great time!");
     Renderer::Destroy();
     LogHelper::Destroy();

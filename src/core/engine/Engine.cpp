@@ -13,6 +13,13 @@ bool Engine::Init() {
     return GetInstance().InitImpl();
 }
 
+void Engine::Stop() {
+    auto& worker=GetInstance().worker;
+    worker.request_stop();
+    if(worker.joinable()) worker.join();
+    Cache::StopBackgroundWork();
+}
+
 ProcessModule Engine::GetClient() {
     return GetInstance().client;
 }
@@ -54,24 +61,35 @@ bool Engine::InitImpl() {
         LogHelper::Free();
 #endif
 
-    std::thread(&Engine::Thread, this).detach();
+    worker=std::jthread([this](std::stop_token stop) { Thread(stop); });
 
     LOGF(INFO, "Successfully initialized engine...");
     return true;
 }
 
-void Engine::Thread() {
-    while (true) {
+void Engine::Thread(std::stop_token stop) {
+    while (!stop.stop_requested()) {
         auto start = steady_clock::now();
-        Cache::Refresh();
+
+        if(!Cache::Refresh()) {
+            // Never drive features using a failed/stale refresh, or busy-spin
+            // after a disconnect. Cache publishes the failure for the UI.
+            std::this_thread::sleep_until(start + 20ms);
+            continue;
+        }
+        // Spectator/map frames may be drawable without a local pawn, but they
+        // must not drive local input features.
+        if(Cache::Status().state != CacheStatus::Ready) {
+            std::this_thread::sleep_until(start + 5ms);
+            continue;
+        }
 		Macro::Update();
 		MouseAim::Update();
 		Spinbot::Update();
 		Triggerbot::Update();
 		Triggerbot::UpdateAimLink();
 
-		if (cfg::settings::free_cpu)
-            std::this_thread::sleep_until(start + 1ms);
+        std::this_thread::sleep_until(start + (cfg::settings::free_cpu ? 1000us : 250us));
     }
 }
 

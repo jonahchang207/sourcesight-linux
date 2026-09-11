@@ -2,11 +2,26 @@
 #include "Renderer.hpp"
 #include "window/Window.hpp"
 
+#include "capture/ScreenCapture.hpp"
+#include "core/diagnostics/Diagnostics.hpp"
+
 #include "config/Current.hpp"
 #include "core/engine/Engine.hpp"
 #include "gui/frontend/esp/Esp.hpp"
 #include "gui/frontend/menu/Menu.hpp"
 #include "gui/frontend/overlays/Overlays.hpp"
+#include <ctime>
+
+namespace {
+std::optional<double> RenderCpuTimeMs() {
+#ifndef _WIN32
+    timespec value{};
+    if(clock_gettime(CLOCK_THREAD_CPUTIME_ID,&value)==0)
+        return 1000.0*value.tv_sec+value.tv_nsec/1000000.0;
+#endif
+    return std::nullopt;
+}
+}
 #ifndef _WIN32
 #include <X11/keysym.h>
 #include <filesystem>
@@ -138,7 +153,12 @@ void Renderer::DestroyImpl() {
 
 void Renderer::ThreadImpl() {
     while (isRunning) {
+        const auto cpu_start=RenderCpuTimeMs();
         Render();
+        const auto cpu_end=RenderCpuTimeMs();
+        // Measured render-thread CPU time; excludes time blocked on swap/GPU.
+        Diagnostics::SetTimings(cpu_start&&cpu_end ? std::optional<double>(*cpu_end-*cpu_start)
+                                                  : std::nullopt, std::nullopt);
 
         // If the game is not focused, do not process state changes,
         // or will start focusing game & overlay
@@ -149,6 +169,8 @@ void Renderer::ThreadImpl() {
     }
 
     // Once exited, destroy everything
+    Engine::Stop(); // Join before UI/input dependencies or logging can disappear.
+    ScreenCapture::StopRecording(); // Finalize any active capture (no-op when idle)
     Window::DestroyImGui();
     Window::DestroyDevice();
     Window::DespawnWindow();
@@ -219,11 +241,12 @@ bool Renderer::HandleState() {
 #endif
 
         Window::SetClickthrough(Window::hwnd, !this->isOpen);
-        LOGF(VERBOSE, "Toggling menu state to {}", this->isOpen);
+        LOGF(VERBOSE, "Toggling menu state to {}", this->isOpen.load());
 
-        // Not the best way, but wont bother the user
-        // As far as i know, no one has complained about the config saving system :D
-        std::thread(Config::Write).detach(); // Not needed, but just in case
+        // Capture settings on their owning UI thread. A detached writer raced
+        // edits and could be terminated halfway through an exit-time save.
+        if((!this->isOpen || pressed_end) && !Config::Write())
+            LOGF(WARNING, "Profile save failed; previous on-disk settings were retained");
     }
 
     if (pressed_end)

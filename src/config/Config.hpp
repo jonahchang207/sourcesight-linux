@@ -17,6 +17,23 @@ using json = nlohmann::json;
 // is lost.
 class Config {
 public:
+    enum class ErrorCode {
+        None,
+        InvalidProfileName,
+        MissingProfile,
+        ParseFailed,
+        InvalidShape,
+        FutureSchema,
+        MigrationFailed,
+        ReadFailed,
+        WriteFailed,
+    };
+
+    struct Error {
+        ErrorCode code{ErrorCode::None};
+        std::string message;
+    };
+
     ~Config() = default;
     Config(const Config&) = delete;
     Config(Config&&) = delete;
@@ -35,6 +52,14 @@ public:
     static bool LoadProfile(const std::string& name);  // switch active + apply
     static bool SaveProfile(const std::string& name);  // save current cfg + switch active
     static bool DeleteProfile(const std::string& name);
+
+    static constexpr int SchemaVersion() { return 2; }
+    static Error LastError();
+    static const char* ErrorCodeName(ErrorCode code);
+
+    // Test-only deterministic failure seam. Production callers must never set
+    // this; it exists so recovery tests can prove an old profile is untouched.
+    static void SetWriteFailureForTesting(bool fail);
 private:
     Config();
 
@@ -54,6 +79,11 @@ private:
     static bool EnsureConfigDir();
     static void EnsureMeta();
     static std::mutex& Mutex();
+    static void SetError(ErrorCode code, std::string message);
+    static bool AtomicWrite(const std::string& path, const std::string& content, bool backup_existing);
+    static json BuildCurrentJson(json data);
+    static bool ValidateAndNormalize(json& data, ErrorCode& code, std::string& error, bool& migrated);
+    static bool ShouldFailWritesForTesting();
 
     static color_t JsonToColor(const json& parent, const std::string& key, const color_t& def);
     static void ColorToJson(json& parent, const std::string& key, const color_t& color);
