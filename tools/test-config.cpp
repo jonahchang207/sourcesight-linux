@@ -32,6 +32,10 @@ int main() {
     const auto profiles = root / "configs";
 
     cfg::enabled = false;
+    cfg::esp::wireframe_blackout = true;
+    cfg::esp::viewmodel_wireframe::enabled = true;
+    cfg::esp::viewmodel_wireframe::opacity = .72f;
+    cfg::esp::viewmodel_wireframe::scale = 1.18f;
     cfg::esp::bullet_tracer::length = 2048.f;
     cfg::world::radar::calibration_height = 1024.f;
     require(Config::SaveProfile("roundtrip"), "initial save");
@@ -41,9 +45,18 @@ int main() {
     saved["unknown_extension"] = { {"preserved", true} };
     write_json(roundtrip, saved);
     cfg::enabled = true;
+    cfg::esp::wireframe_blackout = false;
+    cfg::esp::viewmodel_wireframe::enabled = false;
+    cfg::esp::viewmodel_wireframe::opacity = .9f;
+    cfg::esp::viewmodel_wireframe::scale = 1.f;
     cfg::world::radar::calibration_height = 0.f;
     require(Config::LoadProfile("roundtrip"), "round trip load");
     require(cfg::world::radar::calibration_height == 1024.f, "radar resolution calibration persists");
+    require(cfg::esp::wireframe_blackout, "dark map setting persists");
+    require(cfg::esp::viewmodel_wireframe::enabled &&
+            std::abs(cfg::esp::viewmodel_wireframe::opacity - .72f) < .001f &&
+            std::abs(cfg::esp::viewmodel_wireframe::scale - 1.18f) < .001f,
+            "dark map viewmodel settings persist");
     require(!cfg::enabled, "round trip applies stored setting");
     require(Config::Write(), "round trip rewrite");
     require(read_json(roundtrip)["unknown_extension"]["preserved"].get<bool>(), "unknown field preserved");

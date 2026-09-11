@@ -43,6 +43,7 @@ private:
     
     void RenderBombBox(Bomb bomb);
 	void RenderCrosshair(Player local);
+	void RenderLocalViewmodel(const Player& local);
 	void RenderAimFov();
 
     BulletTrails::System bullet_trails;

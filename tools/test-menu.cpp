@@ -89,6 +89,8 @@ int main() {
         Require(Menu::PreviewNavigateSearch("radar"),"search matches option aliases");
         Frame();
         Require(Menu::PreviewActiveTab()==Tab::WORLD,"search navigates to world");
+        Require(Menu::PreviewNavigateSearch("dark map"),"search finds the dark map toggle");
+        Require(Menu::PreviewNavigateSearch("weapon hands"),"search finds the dark map viewmodel toggle");
         Require(!Menu::PreviewNavigateSearch("nothing-matches-this"),"search has no-result state");
         const bool enabled=cfg::enabled;
         const bool aim=cfg::aim::enabled;

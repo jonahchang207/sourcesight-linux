@@ -460,7 +460,10 @@ void Window::EndRender() {
     glViewport(0, 0, width, height);
     glDisable(GL_SCISSOR_TEST);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    glClearColor(0.f, 0.f, 0.f, 0.f);
+    // Dark map covers the game with black; SourceSight draw data is composited
+    // afterward, so the wireframe, ESP, radar and menu remain visible.
+    const bool dark_map = cfg::enabled && cfg::esp::wireframe && cfg::esp::wireframe_blackout;
+    glClearColor(0.f, 0.f, 0.f, dark_map ? 1.f : 0.f);
     glClear(GL_COLOR_BUFFER_BIT);
     if(cfg::enabled&&cfg::esp::wireframe&&cfg::esp::wireframe_mode==1) {
         const auto snapshot=Cache::CopySnapshot();

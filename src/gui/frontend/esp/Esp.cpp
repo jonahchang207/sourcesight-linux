@@ -1,6 +1,7 @@
 #include "Esp.hpp"
 #include "SoundEsp.hpp"
 #include "PlayerWireframe.hpp"
+#include "ViewmodelWireframe.hpp"
 
 #include "core/input/MouseAim.hpp"
 #include "core/engine/classes/MapRaytrace.hpp"
@@ -153,7 +154,12 @@ void Esp::RenderImpl() {
 	RenderCrosshair(local);
 	RenderBombBox(bomb);
 	RenderAimFov();
+	RenderLocalViewmodel(local);
 	ImGui::PopFont();
+}
+
+void Esp::RenderLocalViewmodel(const Player& local) {
+	ViewmodelWireframe::Render(local, this->io.DisplaySize, this->d, this->font_merged_icons);
 }
 
 void Esp::RenderPlayer(Player player, bool mate) {

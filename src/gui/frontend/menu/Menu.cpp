@@ -60,7 +60,7 @@ constexpr SearchTarget kSearchTargets[] = {
     {Tab::PLAYER, "Bullet trails", "bullet tracer shots trail impact muzzle"},
     {Tab::PLAYER, "Player information", "health armor team distance spotted"},
     {Tab::PLAYER, "Flags", "name money weapon ammo ping scoped c4"},
-    {Tab::WORLD, "Map geometry", "map full map xray lines edge budget distance panel fill"},
+    {Tab::WORLD, "Map geometry", "map full map dark map blackout weapon hands viewmodel grenade nade equipment xray lines edge budget distance panel fill"},
     {Tab::WORLD, "Radar", "radar minimap zoom range rotation"},
     {Tab::WORLD, "Crosshair", "crosshair gap length center dot outline"},
     {Tab::AIM, "Behavior", "aim game mode enemies visible auto-start"},
@@ -691,12 +691,23 @@ void Menu::RenderImpl() {
                         Toggle("Wireframe Map", &cfg::esp::wireframe);
                         ImGui::BeginDisabled(!cfg::esp::wireframe);
                         ImGui::Combo("Mode", &cfg::esp::wireframe_mode, "Overlay\0Full map\0");
+                        Toggle("Dark map", &cfg::esp::wireframe_blackout);
+                        ImGui::SetItemTooltip("Hides the game behind solid black, leaving the wireframe, ESP, radar and SourceSight UI visible.");
+                        ImGui::BeginDisabled(!cfg::esp::wireframe_blackout);
+                        Toggle("Weapon & hands", &cfg::esp::viewmodel_wireframe::enabled);
+                        ImGui::SetItemTooltip("Draws a stylized wireframe viewmodel for your active gun, knife, grenade or C4, with its exact name and ammo.");
+                        ImGui::EndDisabled();
                         if (ImGui::CollapsingHeader("Advanced rendering", ImGuiTreeNodeFlags_DefaultOpen)) {
                             Toggle("X-ray lines", &cfg::esp::wireframe_full_xray);
                             ImGui::SetItemTooltip("Draws rear edges through the map. Keep off to show only the nearest surface; the depth pass suppresses geometry behind it.");
-                            if (cfg::esp::wireframe_mode == 1)
+                            ImGui::BeginDisabled(!cfg::esp::wireframe_blackout || !cfg::esp::viewmodel_wireframe::enabled);
+                            ImGui::SliderFloat("Viewmodel size", &cfg::esp::viewmodel_wireframe::scale, .7f, 1.35f, "%.2f");
+                            ImGui::SliderFloat("Viewmodel opacity", &cfg::esp::viewmodel_wireframe::opacity, .2f, 1.f, "%.2f");
+                            ImGui::EndDisabled();
+                            if (cfg::esp::wireframe_mode == 1) {
                                 ImGui::SliderFloat("Panel fill", &cfg::esp::wireframe_panel_opacity, 0.f, .35f, "%.2f");
-                            ImGui::SetItemTooltip("Graphite fill on the nearest surface only (default 0.10 = 10%%). Independent of line color. This external overlay cannot selectively hide CS2 buildings while preserving its weapon and HUD.");
+                                ImGui::SetItemTooltip("Graphite fill on the nearest surface only (default 0.10 = 10%%). Independent of line color.");
+                            }
                         }
                         ImGui::EndDisabled();
                         if (MapRaytrace::IsReady())

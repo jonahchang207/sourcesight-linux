@@ -4,6 +4,7 @@
 #include "config/Config.hpp"
 #include "core/engine/classes/Player.hpp"
 #include "gui/frontend/esp/PlayerWireframe.hpp"
+#include "gui/frontend/esp/ViewmodelWireframe.hpp"
 #include "gui/renderer/WireframeLines.hpp"
 #include <fstream>
 #include <thread>
@@ -51,6 +52,39 @@ int main(int argc, char** argv) {
     io.Fonts->AddFontDefault();
     unsigned char* pixels;int w,h;
     io.Fonts->GetTexDataAsRGBA32(&pixels,&w,&h);io.Fonts->SetTexID(1);
+    require(ViewmodelWireframe::Classify(weapon_ak47)==ViewmodelWireframe::Shape::Rifle &&
+            ViewmodelWireframe::Classify(weapon_deagle)==ViewmodelWireframe::Shape::Pistol &&
+            ViewmodelWireframe::Classify(weapon_awp)==ViewmodelWireframe::Shape::Sniper &&
+            ViewmodelWireframe::Classify(weapon_hegrenade)==ViewmodelWireframe::Shape::Grenade &&
+            ViewmodelWireframe::Classify(weapon_knife)==ViewmodelWireframe::Shape::Knife &&
+            ViewmodelWireframe::Classify(weapon_c4)==ViewmodelWireframe::Shape::Bomb,
+            "active equipment selects the expected viewmodel geometry");
+    Player local_viewmodel;
+    local_viewmodel.alive=true;
+    local_viewmodel.weapon.item_index=weapon_ak47;
+    local_viewmodel.weapon.name="AK-47";
+    local_viewmodel.weapon.icon="A";
+    local_viewmodel.ammo=30;
+    cfg::esp::wireframe=true;
+    cfg::esp::wireframe_blackout=true;
+    cfg::esp::viewmodel_wireframe::enabled=true;
+    auto render_viewmodel=[&] {
+        ImGui::NewFrame();
+        auto* draw=ImGui::GetBackgroundDrawList();
+        ViewmodelWireframe::Render(local_viewmodel,io.DisplaySize,draw,io.Fonts->Fonts[0]);
+        for(const auto& vertex:draw->VtxBuffer)
+            require(std::isfinite(vertex.pos.x)&&std::isfinite(vertex.pos.y),"finite viewmodel vertex");
+        const int count=draw->VtxBuffer.Size;
+        ImGui::Render();
+        return count;
+    };
+    require(render_viewmodel()>100,"active rifle draws weapon and hand wireframes");
+    local_viewmodel.weapon.item_index=weapon_smokegrenade;
+    local_viewmodel.weapon.name="Smoke Grenade";
+    require(render_viewmodel()>100,"selected grenade draws equipment and hand wireframes");
+    cfg::esp::wireframe_blackout=false;
+    require(render_viewmodel()==0,"viewmodel stays hidden outside dark map mode");
+    cfg::esp::wireframe_blackout=true;
     // Compare batched AA positions/UVs against ImGui's regular line renderer.
     const std::array<WireframeLines::Line,2> line_fixture{{{{20,30},{150,70},IM_COL32_WHITE},
                                                         {{40,100},{80,10},IM_COL32(80,160,90,180)}}};

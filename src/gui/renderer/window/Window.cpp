@@ -1,4 +1,5 @@
 #include "Window.hpp"
+#include "config/Current.hpp"
 
 ID3D11Device* Window::device = nullptr;
 ID3D11DeviceContext* Window::device_context = nullptr;
@@ -237,8 +238,10 @@ void Window::EndRender()
 	// Render ImGui
 	ImGui::Render();
 
-	// Make a color that's clear / transparent
-	float color[4]{ 0, 0, 0, 0 };
+	// Dark map covers the game with black; SourceSight draw data is composited
+	// afterward, so the wireframe, ESP, radar and menu remain visible.
+	const bool dark_map = cfg::enabled && cfg::esp::wireframe && cfg::esp::wireframe_blackout;
+	float color[4]{ 0.f, 0.f, 0.f, dark_map ? 1.f : 0.f };
 
 	// Set the render target and then clear it
 	device_context->OMSetRenderTargets(1, &render_targetview, nullptr);
