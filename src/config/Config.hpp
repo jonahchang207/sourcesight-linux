@@ -53,7 +53,7 @@ public:
     static bool SaveProfile(const std::string& name);  // save current cfg + switch active
     static bool DeleteProfile(const std::string& name);
 
-    static constexpr int SchemaVersion() { return 2; }
+    static constexpr int SchemaVersion() { return 3; }
     static Error LastError();
     static const char* ErrorCodeName(ErrorCode code);
 

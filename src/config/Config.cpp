@@ -308,9 +308,9 @@ bool Config::ValidateAndNormalize(json& data, ErrorCode& code, std::string& erro
         return false;
     }
 
-    // Version 0 was the historical unversioned flat/nested profile. Version 1
-    // introduced profiles but no semantic field changes. Both migrate by
-    // adding the explicit current version while retaining unknown fields.
+    // Version 3 removes the obsolete bullet-tracer distance and adds the
+    // persisted Simple/Advanced control mode. Older profiles retain unknown
+    // extension fields while known legacy fields are normalized on rewrite.
     migrated = version != static_cast<std::uint64_t>(SchemaVersion());
     data["schema_version"] = SchemaVersion();
     const json schema = BuildCurrentJson(json::object());
@@ -454,7 +454,6 @@ bool Config::ReadImpl(const std::string& path) {
 			const auto object=data["esp"].value("bullet_tracer",json::object());
 			const auto bt=object.is_object()?object:json::object();
 			cfg::esp::bullet_tracer::enabled = bt.value("enabled", false);
-			cfg::esp::bullet_tracer::length = std::clamp(bt.value("length", 8192.0f),50.f,16384.f);
 			cfg::esp::bullet_tracer::duration = std::clamp(bt.value("duration", 1.25f),.1f,10.f);
 			cfg::esp::bullet_tracer::muzzle_offset = bt.value("muzzle_offset", 45.0f);
 			cfg::esp::bullet_tracer::thickness = bt.value("thickness", 1.5f);
@@ -595,6 +594,7 @@ bool Config::ReadImpl(const std::string& path) {
 
 		// utils
 		//cfg::settings::console = data["utils"].value("console", true);
+		cfg::settings::advanced_controls = data["utils"].value("advanced_controls", false);
 		cfg::settings::watermark = data["utils"].value("watermark", true);
 		cfg::settings::streamproof = data["utils"].value("streamproof", true);
 		cfg::settings::vsync = data["utils"].value("vsync", true);
@@ -749,16 +749,18 @@ json Config::BuildCurrentJson(json data) {
 	data["esp"]["bomb"] = cfg::esp::bomb;
 
 	// bullet tracer
-	data["esp"]["bullet_tracer"]["enabled"] = cfg::esp::bullet_tracer::enabled;
-	data["esp"]["bullet_tracer"]["length"] = cfg::esp::bullet_tracer::length;
-	data["esp"]["bullet_tracer"]["duration"] = cfg::esp::bullet_tracer::duration;
-	data["esp"]["bullet_tracer"]["muzzle_offset"] = cfg::esp::bullet_tracer::muzzle_offset;
-	data["esp"]["bullet_tracer"]["thickness"] = cfg::esp::bullet_tracer::thickness;
-	data["esp"]["bullet_tracer"]["style"] = cfg::esp::bullet_tracer::style;
-	data["esp"]["bullet_tracer"]["glow"] = cfg::esp::bullet_tracer::glow;
-	data["esp"]["bullet_tracer"]["impact"] = cfg::esp::bullet_tracer::impact;
-	ColorToJson(data["esp"]["bullet_tracer"], "team", cfg::esp::bullet_tracer::team);
-	ColorToJson(data["esp"]["bullet_tracer"], "enemy", cfg::esp::bullet_tracer::enemy);
+	auto& bullet_tracer = data["esp"]["bullet_tracer"];
+	if (!bullet_tracer.is_object()) bullet_tracer = json::object();
+	bullet_tracer.erase("length");
+	bullet_tracer["enabled"] = cfg::esp::bullet_tracer::enabled;
+	bullet_tracer["duration"] = cfg::esp::bullet_tracer::duration;
+	bullet_tracer["muzzle_offset"] = cfg::esp::bullet_tracer::muzzle_offset;
+	bullet_tracer["thickness"] = cfg::esp::bullet_tracer::thickness;
+	bullet_tracer["style"] = cfg::esp::bullet_tracer::style;
+	bullet_tracer["glow"] = cfg::esp::bullet_tracer::glow;
+	bullet_tracer["impact"] = cfg::esp::bullet_tracer::impact;
+	ColorToJson(bullet_tracer, "team", cfg::esp::bullet_tracer::team);
+	ColorToJson(bullet_tracer, "enemy", cfg::esp::bullet_tracer::enemy);
 
 	// wireframe
 	{
@@ -882,6 +884,7 @@ json Config::BuildCurrentJson(json data) {
 
 	// utils
 	//data["utils"]["console"] = cfg::settings::console;
+	data["utils"]["advanced_controls"] = cfg::settings::advanced_controls;
 	data["utils"]["watermark"] = cfg::settings::watermark;
 	data["utils"]["streamproof"] = cfg::settings::streamproof;
 	data["utils"]["vsync"] = cfg::settings::vsync;

@@ -6,6 +6,7 @@
 #include "core/diagnostics/Diagnostics.hpp"
 
 #include "config/Current.hpp"
+#include "config/AutoCalibration.hpp"
 #include "core/engine/Engine.hpp"
 #include "gui/frontend/esp/Esp.hpp"
 #include "gui/frontend/menu/Menu.hpp"
@@ -178,6 +179,9 @@ void Renderer::ThreadImpl() {
 
 void Renderer::Render() {
     Window::StartRender();
+
+    const auto& display = ImGui::GetIO().DisplaySize;
+    AutoCalibration::ApplySimple(display.x, display.y);
 
     Esp::Render();
     Overlays::Render();

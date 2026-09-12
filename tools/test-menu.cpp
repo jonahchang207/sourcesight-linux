@@ -73,6 +73,21 @@ int main() {
         io.Fonts->GetTexDataAsRGBA32(&font_pixels, &font_width, &font_height);
         io.Fonts->SetTexID(static_cast<ImTextureID>(1));
         Frame();
+        cfg::settings::advanced_controls = false;
+        cfg::esp::wireframe_budget = 1234;
+        Frame();
+        Require(cfg::esp::wireframe_budget == 6000 && cfg::world::radar::calibration_height == 900.f,
+                "simple mode automatically tunes the current viewport");
+        const ImVec2 mode_pos = Menu::GetPos() + ImVec2(Menu::GetSize().x - 353.f, 38.f);
+        io.AddMousePosEvent(mode_pos.x, mode_pos.y);
+        io.AddMouseButtonEvent(0, true);
+        Frame();
+        io.AddMouseButtonEvent(0, false);
+        Frame();
+        Require(cfg::settings::advanced_controls, "header mode button enables advanced controls");
+        cfg::esp::wireframe_budget = 4321;
+        Frame();
+        Require(cfg::esp::wireframe_budget == 4321, "advanced mode preserves granular rendering values");
         for (int tab = 0; tab < 7; ++tab)
             SelectTab(tab);
 
@@ -91,6 +106,7 @@ int main() {
         Require(Menu::PreviewActiveTab()==Tab::WORLD,"search navigates to world");
         Require(Menu::PreviewNavigateSearch("dark map"),"search finds the dark map toggle");
         Require(Menu::PreviewNavigateSearch("weapon hands"),"search finds the dark map viewmodel toggle");
+        Require(Menu::PreviewNavigateSearch("automatic calibration"),"search finds setup mode");
         Require(!Menu::PreviewNavigateSearch("nothing-matches-this"),"search has no-result state");
         const bool enabled=cfg::enabled;
         const bool aim=cfg::aim::enabled;

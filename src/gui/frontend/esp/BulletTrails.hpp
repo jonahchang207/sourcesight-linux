@@ -12,8 +12,9 @@ struct Hit {
     int player=-1;
     bool map_ready=false;
 };
-// Player capsules follow sampled bones. No penetration or ricochet simulation.
-Hit Trace(const Vec3_t& origin,const Vec3_t& direction,float distance,
+// Player capsules follow sampled bones. The reach is derived from the loaded
+// map bounds; there is no user distance cutoff. No penetration or ricochet.
+Hit Trace(const Vec3_t& origin,const Vec3_t& direction,
           std::span<const Player> players,int shooter);
 struct Shot {
     Vec3_t origin;

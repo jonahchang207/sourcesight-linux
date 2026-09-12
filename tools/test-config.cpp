@@ -1,6 +1,7 @@
 #include "common.hpp"
 #include "config/Config.hpp"
 #include "config/Current.hpp"
+#include "config/AutoCalibration.hpp"
 #include "core/diagnostics/Diagnostics.hpp"
 #include "core/engine/cache/Cache.hpp"
 
@@ -36,12 +37,14 @@ int main() {
     cfg::esp::viewmodel_wireframe::enabled = true;
     cfg::esp::viewmodel_wireframe::opacity = .72f;
     cfg::esp::viewmodel_wireframe::scale = 1.18f;
-    cfg::esp::bullet_tracer::length = 2048.f;
+    cfg::settings::advanced_controls = true;
     cfg::world::radar::calibration_height = 1024.f;
     require(Config::SaveProfile("roundtrip"), "initial save");
     const auto roundtrip = profiles / "roundtrip.json";
     auto saved = read_json(roundtrip);
     require(saved.value("schema_version", -1) == Config::SchemaVersion(), "schema version written");
+    require(saved["utils"]["advanced_controls"].get<bool>(), "advanced control mode persists");
+    saved["esp"]["bullet_tracer"]["length"] = 2048.f;
     saved["unknown_extension"] = { {"preserved", true} };
     write_json(roundtrip, saved);
     cfg::enabled = true;
@@ -59,7 +62,9 @@ int main() {
             "dark map viewmodel settings persist");
     require(!cfg::enabled, "round trip applies stored setting");
     require(Config::Write(), "round trip rewrite");
-    require(read_json(roundtrip)["unknown_extension"]["preserved"].get<bool>(), "unknown field preserved");
+    const auto rewritten = read_json(roundtrip);
+    require(rewritten["unknown_extension"]["preserved"].get<bool>(), "unknown field preserved");
+    require(!rewritten["esp"]["bullet_tracer"].contains("length"), "legacy tracer distance removed on rewrite");
     require(std::filesystem::exists(roundtrip.string() + ".bak"), "previous-good profile backup created");
 
     const auto corrupt = profiles / "corrupt.json";
@@ -97,12 +102,25 @@ int main() {
             "oversized schema cannot wrap into a legacy migration");
 
     auto bounded = read_json(roundtrip);
-    bounded["esp"]["bullet_tracer"]["length"] = -9999.f;
     bounded["esp"]["wireframe_budget"] = 999999;
     write_json(profiles / "bounded.json", bounded);
     require(Config::LoadProfile("bounded"), "bounded profile loads");
-    require(cfg::esp::bullet_tracer::length == 50.f && cfg::esp::wireframe_budget == 8000,
-            "numeric values are clamped to supported boundaries");
+    require(cfg::esp::wireframe_budget == 8000, "numeric values are clamped to supported boundaries");
+
+    cfg::settings::advanced_controls = false;
+    cfg::world::radar::calibration_height = 1000.f;
+    cfg::world::radar::pos = {100.f, 50.f};
+    cfg::world::radar::size = {200.f, 200.f};
+    AutoCalibration::ApplySimple(800.f, 500.f);
+    require(cfg::world::radar::calibration_height == 500.f &&
+            std::abs(cfg::world::radar::pos.x - 50.f) < .001f &&
+            cfg::esp::wireframe_budget == 3000,
+            "simple mode tracks viewport scale and selects a bounded render budget");
+    cfg::settings::advanced_controls = true;
+    cfg::esp::wireframe_budget = 4321;
+    AutoCalibration::ApplySimple(1920.f, 1080.f);
+    require(cfg::esp::wireframe_budget == 4321 && cfg::world::radar::calibration_height == 500.f,
+            "advanced mode preserves granular values");
 
     require(Config::SaveProfile("write-failure"), "write failure fixture");
     const auto write_failure = profiles / "write-failure.json";

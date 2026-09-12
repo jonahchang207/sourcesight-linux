@@ -31,7 +31,6 @@ namespace cfg {
 
 		namespace bullet_tracer {
 			inline bool enabled = false;
-			inline float length = 8192.0f;
 			inline float duration = 1.25f;
 			inline float muzzle_offset = 45.0f;
 			inline float thickness = 1.5f;
@@ -177,6 +176,7 @@ namespace cfg {
 	}
 
 	namespace settings {
+		inline bool advanced_controls = false;
 		inline bool watermark = true;
 		inline bool streamproof = true;    // On by default for safety
 		inline bool vsync = false;

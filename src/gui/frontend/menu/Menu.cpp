@@ -1,6 +1,7 @@
 #include "Menu.hpp"
 
 #include "config/Config.hpp"
+#include "config/AutoCalibration.hpp"
 #include "core/engine/cache/Cache.hpp"
 #include "core/engine/classes/MapRaytrace.hpp"
 #include "core/diagnostics/Diagnostics.hpp"
@@ -71,6 +72,7 @@ constexpr SearchTarget kSearchTargets[] = {
     {Tab::MACRO, "AWP Quickswitch", "macro quickswitch bolt action"},
     {Tab::SOUND_ESP, "Sound ESP", "sound footsteps gunshots duration fade"},
     {Tab::SETTINGS, "Profiles", "profile load save create delete"},
+    {Tab::SETTINGS, "Setup mode", "simple advanced automatic calibration autocal controls"},
     {Tab::SETTINGS, "Display", "streamproof watermark vsync cpu panic"},
     {Tab::SETTINGS, "Visual quality", "visual quality preset performance detail"},
     {Tab::SETTINGS, "Screen capture", "screenshot recording fps"},
@@ -338,6 +340,7 @@ void Menu::RenderImpl() {
 
     auto& io = ImGui::GetIO();
     const auto screen = io.DisplaySize;
+    AutoCalibration::ApplySimple(screen.x, screen.y);
     static auto color_flags = ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel;
 
 #ifdef _DEBUG
@@ -410,6 +413,12 @@ void Menu::RenderImpl() {
 
         ImGui::SetCursorPos(ImVec2(rail+28,24));
         ImGui::TextDisabled("WORKSPACE  /  %s",tabs[active_tab].label.c_str());
+        ImGui::SetCursorPos(ImVec2(size.x-418,22));
+        if (ImGui::Button(cfg::settings::advanced_controls ? "Advanced mode" : "Simple mode", ImVec2(130,32)))
+            cfg::settings::advanced_controls = !cfg::settings::advanced_controls;
+        ImGui::SetItemTooltip(cfg::settings::advanced_controls
+            ? "Advanced mode exposes granular rendering and calibration controls."
+            : "Simple mode automatically tunes presentation and viewport scaling. Click for Advanced.");
         ImGui::SetCursorPos(ImVec2(size.x-270,22));
         Toggle("Overlay", &cfg::enabled);
         ImGui::SameLine(0,18);
@@ -449,9 +458,11 @@ void Menu::RenderImpl() {
                                 ImGui::SameLine();
                                 ImGui::ColorEdit4("Enemy##box", cfg::esp::colors::box_enemy.data(), color_flags);
                                 Toggle("Filled", &cfg::esp::box_filled);
-                                if (cfg::esp::box_filled)
-                                    ImGui::SliderFloat("Fill alpha", &cfg::esp::box_fill_alpha, 0.02f, 1.0f, "%.2f");
-                                ImGui::SliderFloat("Box thickness", &cfg::esp::box_thickness, 1.0f, 4.0f, "%.1f");
+                                if (AutoCalibration::Advanced()) {
+                                    if (cfg::esp::box_filled)
+                                        ImGui::SliderFloat("Fill alpha", &cfg::esp::box_fill_alpha, 0.02f, 1.0f, "%.2f");
+                                    ImGui::SliderFloat("Box thickness", &cfg::esp::box_thickness, 1.0f, 4.0f, "%.1f");
+                                }
                             }
                             ImGui::EndDisabled();
 
@@ -466,7 +477,8 @@ void Menu::RenderImpl() {
                                 ImGui::ColorEdit4("Team##skel", cfg::esp::colors::skeleton_team.data(), color_flags);
                                 ImGui::SameLine();
                                 ImGui::ColorEdit4("Enemy##skel", cfg::esp::colors::skeleton_enemy.data(), color_flags);
-                                ImGui::SliderFloat("Skeleton thickness", &cfg::esp::skeleton_thickness, 1.0f, 4.0f, "%.1f");
+                                if (AutoCalibration::Advanced())
+                                    ImGui::SliderFloat("Skeleton thickness", &cfg::esp::skeleton_thickness, 1.0f, 4.0f, "%.1f");
                             }
                             ImGui::EndDisabled();
 
@@ -478,11 +490,15 @@ void Menu::RenderImpl() {
                             ImGui::BeginDisabled(!cfg::esp::player_wireframe::enabled);
                             Toggle("Visible edges only", &cfg::esp::player_wireframe::visible_only);
                             ImGui::SetItemTooltip("Hide blocked and unknown surface cells. Visibility samples static map collision; smoke and moving objects are not included. This is a bone-driven approximation, not the game model.");
-                            ImGui::Combo("Detail##player-wire", &cfg::esp::player_wireframe::detail, "Standard\0Detailed\0Ultra\0");
-                            ImGui::SetItemTooltip("8 / 12 / 16 sides with 3 / 5 / 7 body rings. Distant players automatically use fewer subdivisions to reduce clutter and rendering work.");
-                            ImGui::SliderFloat("Opacity##player-wire", &cfg::esp::player_wireframe::opacity, 0.f, 1.f, "%.2f");
-                            ImGui::SliderFloat("Thickness##player-wire", &cfg::esp::player_wireframe::thickness, 1.f, 3.f, "%.1f");
-                            ImGui::SliderFloat("Distance##player-wire", &cfg::esp::player_wireframe::max_distance, 100.f, 10000.f, "%.0f u");
+                            if (AutoCalibration::Advanced()) {
+                                ImGui::Combo("Detail##player-wire", &cfg::esp::player_wireframe::detail, "Standard\0Detailed\0Ultra\0");
+                                ImGui::SetItemTooltip("8 / 12 / 16 sides with 3 / 5 / 7 body rings. Distant players automatically use fewer subdivisions to reduce clutter and rendering work.");
+                                ImGui::SliderFloat("Opacity##player-wire", &cfg::esp::player_wireframe::opacity, 0.f, 1.f, "%.2f");
+                                ImGui::SliderFloat("Thickness##player-wire", &cfg::esp::player_wireframe::thickness, 1.f, 3.f, "%.1f");
+                                ImGui::SliderFloat("Distance##player-wire", &cfg::esp::player_wireframe::max_distance, 100.f, 10000.f, "%.0f u");
+                            } else {
+                                ImGui::TextColored(kSignalOK, "AUTO  mesh detail + distance");
+                            }
                             ImGui::ColorEdit3("Visible##player-wire", cfg::esp::player_wireframe::visible.data(), ImGuiColorEditFlags_NoInputs);
                             ImGui::ColorEdit3("Blocked##player-wire", cfg::esp::player_wireframe::blocked.data(), ImGuiColorEditFlags_NoInputs);
                             ImGui::ColorEdit3("Unknown##player-wire", cfg::esp::player_wireframe::unknown.data(), ImGuiColorEditFlags_NoInputs);
@@ -495,7 +511,8 @@ void Menu::RenderImpl() {
                             ImGui::BeginDisabled(!cfg::esp::head_tracker);
                             {
                                 Toggle("Filled Head", &cfg::esp::head_tracker_filled);
-                                ImGui::SliderFloat("Head size", &cfg::esp::head_tracker_size, 2.0f, 14.0f, "%.1f");
+                                if (AutoCalibration::Advanced())
+                                    ImGui::SliderFloat("Head size", &cfg::esp::head_tracker_size, 2.0f, 14.0f, "%.1f");
                                 ImGui::ColorEdit4("Team##head", cfg::esp::colors::tracker_team.data(), color_flags & ~ImGuiColorEditFlags_NoLabel);
                                 ImGui::ColorEdit4("Enemy##head", cfg::esp::colors::tracker_enemy.data(), color_flags & ~ImGuiColorEditFlags_NoLabel);
                             }
@@ -512,7 +529,8 @@ void Menu::RenderImpl() {
                                 ImGui::ColorEdit4("Team##trc", cfg::esp::colors::tracer_team.data(), color_flags);
                                 ImGui::SameLine();
                                 ImGui::ColorEdit4("Enemy##trc", cfg::esp::colors::tracer_enemy.data(), color_flags);
-                                ImGui::SliderFloat("Tracer thickness", &cfg::esp::tracer_thickness, 1.0f, 4.0f, "%.1f");
+                                if (AutoCalibration::Advanced())
+                                    ImGui::SliderFloat("Tracer thickness", &cfg::esp::tracer_thickness, 1.0f, 4.0f, "%.1f");
                             }
                             ImGui::EndDisabled();
 
@@ -521,23 +539,28 @@ void Menu::RenderImpl() {
                             BeginSettingsCard("Bullet trails");
                             ImGui::BeginGroup();
                             Toggle("Bullet Tracer", &cfg::esp::bullet_tracer::enabled);
-                            ImGui::SetItemTooltip("Estimated shots stop at the nearest static-world triangle or bone-based player capsule, including teammates. No penetration, smoke, moving props or exact server hitboxes.");
+                            ImGui::SetItemTooltip("Estimated shots stop at the nearest static-world triangle or bone-based player capsule, including teammates. Reach is automatic; there is no distance cutoff.");
                             ImGui::BeginDisabled(!cfg::esp::bullet_tracer::enabled);
                             {
-                                ImGui::SameLine();
-                                ImGui::ColorEdit4("Team##bt", cfg::esp::bullet_tracer::team.data(), color_flags);
-                                ImGui::SameLine();
-                                ImGui::ColorEdit4("Enemy##bt", cfg::esp::bullet_tracer::enemy.data(), color_flags);
-                                ImGui::Combo("Trail style", &cfg::esp::bullet_tracer::style, "Ion\0Streak\0Minimal\0");
-                                ImGui::BeginDisabled(cfg::esp::bullet_tracer::style!=0);
-                                ImGui::SliderFloat("Glow", &cfg::esp::bullet_tracer::glow, 0.f, 1.f, "%.2f");
-                                ImGui::EndDisabled();
-                                Toggle("Impact markers", &cfg::esp::bullet_tracer::impact);
-                                ImGui::SliderFloat("Trace distance", &cfg::esp::bullet_tracer::length, 50.0f, 16384.0f, "%.0f u");
-                                ImGui::SliderFloat("Muzzle offset", &cfg::esp::bullet_tracer::muzzle_offset, 10.0f, 150.0f, "%.0f u");
-                                ImGui::SliderFloat("Bullet duration", &cfg::esp::bullet_tracer::duration, 0.1f, 10.0f, "%.1f s");
-                                ImGui::SliderFloat("Bullet thickness", &cfg::esp::bullet_tracer::thickness, 1.0f, 4.0f, "%.1f");
-                                ImGui::TextWrapped(MapRaytrace::IsReady()?"Collision ready: world + players.":"Map collision unavailable: new trails are paused.");
+                                if (AutoCalibration::Advanced()) {
+                                    ImGui::SameLine();
+                                    ImGui::ColorEdit4("Team##bt", cfg::esp::bullet_tracer::team.data(), color_flags);
+                                    ImGui::SameLine();
+                                    ImGui::ColorEdit4("Enemy##bt", cfg::esp::bullet_tracer::enemy.data(), color_flags);
+                                    ImGui::Combo("Trail style", &cfg::esp::bullet_tracer::style, "Ion\0Streak\0Minimal\0");
+                                    ImGui::BeginDisabled(cfg::esp::bullet_tracer::style!=0);
+                                    ImGui::SliderFloat("Glow", &cfg::esp::bullet_tracer::glow, 0.f, 1.f, "%.2f");
+                                    ImGui::EndDisabled();
+                                    Toggle("Impact markers", &cfg::esp::bullet_tracer::impact);
+                                    ImGui::SliderFloat("Muzzle offset", &cfg::esp::bullet_tracer::muzzle_offset, 10.0f, 150.0f, "%.0f u");
+                                    ImGui::SliderFloat("Bullet duration", &cfg::esp::bullet_tracer::duration, 0.1f, 10.0f, "%.1f s");
+                                    ImGui::SliderFloat("Bullet thickness", &cfg::esp::bullet_tracer::thickness, 1.0f, 4.0f, "%.1f");
+                                } else {
+                                    ImGui::TextColored(kSignalOK, "AUTO  collision reach + presentation");
+                                }
+                                ImGui::TextWrapped(MapRaytrace::IsReady()
+                                    ? "Stops at the nearest map surface or player."
+                                    : "Map collision unavailable: new trails are paused.");
                             }
                             ImGui::EndDisabled();
 
@@ -697,17 +720,21 @@ void Menu::RenderImpl() {
                         Toggle("Weapon & hands", &cfg::esp::viewmodel_wireframe::enabled);
                         ImGui::SetItemTooltip("Draws a stylized wireframe viewmodel for your active gun, knife, grenade or C4, with its exact name and ammo.");
                         ImGui::EndDisabled();
-                        if (ImGui::CollapsingHeader("Advanced rendering", ImGuiTreeNodeFlags_DefaultOpen)) {
-                            Toggle("X-ray lines", &cfg::esp::wireframe_full_xray);
-                            ImGui::SetItemTooltip("Draws rear edges through the map. Keep off to show only the nearest surface; the depth pass suppresses geometry behind it.");
-                            ImGui::BeginDisabled(!cfg::esp::wireframe_blackout || !cfg::esp::viewmodel_wireframe::enabled);
-                            ImGui::SliderFloat("Viewmodel size", &cfg::esp::viewmodel_wireframe::scale, .7f, 1.35f, "%.2f");
-                            ImGui::SliderFloat("Viewmodel opacity", &cfg::esp::viewmodel_wireframe::opacity, .2f, 1.f, "%.2f");
-                            ImGui::EndDisabled();
-                            if (cfg::esp::wireframe_mode == 1) {
-                                ImGui::SliderFloat("Panel fill", &cfg::esp::wireframe_panel_opacity, 0.f, .35f, "%.2f");
-                                ImGui::SetItemTooltip("Graphite fill on the nearest surface only (default 0.10 = 10%%). Independent of line color.");
+                        if (AutoCalibration::Advanced()) {
+                            if (ImGui::CollapsingHeader("Advanced rendering", ImGuiTreeNodeFlags_DefaultOpen)) {
+                                Toggle("X-ray lines", &cfg::esp::wireframe_full_xray);
+                                ImGui::SetItemTooltip("Draws rear edges through the map. Keep off to show only the nearest surface; the depth pass suppresses geometry behind it.");
+                                ImGui::BeginDisabled(!cfg::esp::wireframe_blackout || !cfg::esp::viewmodel_wireframe::enabled);
+                                ImGui::SliderFloat("Viewmodel size", &cfg::esp::viewmodel_wireframe::scale, .7f, 1.35f, "%.2f");
+                                ImGui::SliderFloat("Viewmodel opacity", &cfg::esp::viewmodel_wireframe::opacity, .2f, 1.f, "%.2f");
+                                ImGui::EndDisabled();
+                                if (cfg::esp::wireframe_mode == 1) {
+                                    ImGui::SliderFloat("Panel fill", &cfg::esp::wireframe_panel_opacity, 0.f, .35f, "%.2f");
+                                    ImGui::SetItemTooltip("Graphite fill on the nearest surface only (default 0.10 = 10%%). Independent of line color.");
+                                }
                             }
+                        } else {
+                            ImGui::TextColored(kSignalOK, "AUTO  detail + line scale + depth");
                         }
                         ImGui::EndDisabled();
                         if (MapRaytrace::IsReady())
@@ -717,13 +744,15 @@ void Menu::RenderImpl() {
                             ImGui::TextWrapped("Geometry unavailable or loading. Missing map files are retried automatically.");
                         // Full-map rendering uses the depth-tested mesh pass;
                         // overlay-only distance/budget controls do not apply.
-                        ImGui::BeginDisabled(!cfg::esp::wireframe || cfg::esp::wireframe_mode == 1);
-                        ImGui::SliderFloat("Max distance", &cfg::esp::wireframe_max_dist, 500, 10000, "%.0f u");
-                        ImGui::SliderFloat("Opacity", &cfg::esp::wireframe_opacity, 0, 1, "%.2f");
-                        ImGui::ColorEdit3("Color", cfg::esp::wireframe_color.data(), ImGuiColorEditFlags_NoInputs);
-                        ImGui::SliderInt("Detail", &cfg::esp::wireframe_budget, 500, 8000, "%d edges");
-                        ImGui::SetItemTooltip("Maximum edges per frame. Lower detail reduces rendering cost; nearby geometry is prioritized.");
-                        ImGui::EndDisabled();
+                        if (AutoCalibration::Advanced()) {
+                            ImGui::BeginDisabled(!cfg::esp::wireframe || cfg::esp::wireframe_mode == 1);
+                            ImGui::SliderFloat("Max distance", &cfg::esp::wireframe_max_dist, 500, 10000, "%.0f u");
+                            ImGui::SliderFloat("Opacity", &cfg::esp::wireframe_opacity, 0, 1, "%.2f");
+                            ImGui::ColorEdit3("Color", cfg::esp::wireframe_color.data(), ImGuiColorEditFlags_NoInputs);
+                            ImGui::SliderInt("Detail", &cfg::esp::wireframe_budget, 500, 8000, "%d edges");
+                            ImGui::SetItemTooltip("Maximum edges per frame. Lower detail reduces rendering cost; nearby geometry is prioritized.");
+                            ImGui::EndDisabled();
+                        }
                         if (cfg::esp::wireframe_mode == 1)
                             ImGui::TextDisabled("Full-map mode uses the complete depth mesh; overlay distance and edge budget are not used.");
                         EndSettingsCard(true);
@@ -733,34 +762,33 @@ void Menu::RenderImpl() {
                         Toggle("Enable", &cfg::world::radar::enabled);
                         ImGui::BeginDisabled(!cfg::world::radar::enabled);
                         {
-                            ImGui::SliderFloat("Opacity", &cfg::world::radar::opacity, 0, 1, "%.2f");
-                            Toggle("Match CS2 minimap", &cfg::world::radar::minimap);
-                            Toggle("Apply CS2 zoom", &cfg::world::radar::auto_sync);
-                            ImGui::SliderFloat("CS2 radar zoom", &cfg::world::radar::zoom, .25f, 1.f, "%.2f");
-                            ImGui::SliderFloat("Scale correction", &cfg::world::radar::scale_correction, .75f, 1.25f, "%.2f");
-                            ImGui::SliderFloat("Calibrated range", &cfg::world::radar::range, 100.f, 8000.f, "%.0f u");
-                            ImGui::SetItemTooltip("World radius at zoom 0.70. Lower this if dots cluster too close to the center. Calibrate again after changing maps; collision bounds cannot supply the minimap scale.");
-                            ImGui::SliderFloat("HUD scaling", &cfg::world::radar::hud_scale, .5f, 2.f, "%.2f");
-                            ImGui::SetItemTooltip("Match hud_scaling. Scales the overlay rectangle from its top-left corner.");
-                            ImGui::SliderFloat("Radar HUD size", &cfg::world::radar::hud_size, .5f, 2.f, "%.2f");
-                            ImGui::SetItemTooltip("Match cl_hud_radar_scale. Adjust position separately if the HUD moves.");
-                            ImGui::DragFloat2("Position", &cfg::world::radar::pos.x, 1.f);
-                            ImGui::DragFloat2("Base size", &cfg::world::radar::size.x, 1.f, 40.f, 1000.f, "%.0f", ImGuiSliderFlags_AlwaysClamp);
-                            ImGui::DragFloat2("Offset", &cfg::world::radar::offset.x, 1.f);
-                            if (ImGui::Button("Use current resolution")) {
-                                const float height = ImGui::GetIO().DisplaySize.y;
-                                if (height > 0.f) {
-                                    const float previous = cfg::world::radar::calibration_height;
-                                    const float factor = previous > 0.f ? height / previous : 1.f;
-                                    cfg::world::radar::pos *= factor;
-                                    cfg::world::radar::size *= factor;
-                                    cfg::world::radar::offset *= factor;
-                                    cfg::world::radar::calibration_height = height;
+                            if (AutoCalibration::Advanced()) {
+                                ImGui::SliderFloat("Opacity", &cfg::world::radar::opacity, 0, 1, "%.2f");
+                                Toggle("Match CS2 minimap", &cfg::world::radar::minimap);
+                                Toggle("Apply CS2 zoom", &cfg::world::radar::auto_sync);
+                                ImGui::SliderFloat("CS2 radar zoom", &cfg::world::radar::zoom, .25f, 1.f, "%.2f");
+                                ImGui::SliderFloat("Scale correction", &cfg::world::radar::scale_correction, .75f, 1.25f, "%.2f");
+                                ImGui::SliderFloat("Calibrated range", &cfg::world::radar::range, 100.f, 8000.f, "%.0f u");
+                                ImGui::SetItemTooltip("World radius at zoom 0.70. Lower this if dots cluster too close to the center. Calibrate again after changing maps; collision bounds cannot supply the minimap scale.");
+                                ImGui::SliderFloat("HUD scaling", &cfg::world::radar::hud_scale, .5f, 2.f, "%.2f");
+                                ImGui::SetItemTooltip("Match hud_scaling. Scales the overlay rectangle from its top-left corner.");
+                                ImGui::SliderFloat("Radar HUD size", &cfg::world::radar::hud_size, .5f, 2.f, "%.2f");
+                                ImGui::SetItemTooltip("Match cl_hud_radar_scale. Adjust position separately if the HUD moves.");
+                                ImGui::DragFloat2("Position", &cfg::world::radar::pos.x, 1.f);
+                                ImGui::DragFloat2("Base size", &cfg::world::radar::size.x, 1.f, 40.f, 1000.f, "%.0f", ImGuiSliderFlags_AlwaysClamp);
+                                ImGui::DragFloat2("Offset", &cfg::world::radar::offset.x, 1.f);
+                                if (ImGui::Button("Use current resolution"))
+                                    AutoCalibration::TrackViewport(ImGui::GetIO().DisplaySize.y);
+                                ImGui::SetItemTooltip("Remember this game-window height so the calibrated radar scales with resolution changes.");
+                                ImGui::TextWrapped("Align the guide circle and center with CS2 first, then adjust calibrated range until teammate dots match. Use centered radar with dynamic zoom off.");
+                                Toggle("Disable Rotation", &cfg::world::radar::no_rotate);
+                            } else {
+                                ImGui::TextColored(kSignalOK, "AUTO  live viewport scaling");
+                                ImGui::TextWrapped("Uses the standard CS2 baseline: cl_radar_scale 0.7, cl_hud_radar_scale 1, hud_scaling 1. Drag the radar itself to place it; use Advanced if your CS2 values differ.");
+                                ImGui::TextDisabled("Reference height  %.0f px", cfg::world::radar::calibration_height);
+                                if (!MapRaytrace::IsReady())
+                                    ImGui::TextWrapped("Map overview scale cannot be inferred until collision data is ready; the saved range remains in use.");
                                 }
-                            }
-                            ImGui::SetItemTooltip("Remember this game-window height so the calibrated radar scales with resolution changes.");
-                            ImGui::TextWrapped("Align the guide circle and center with CS2 first, then adjust calibrated range until teammate dots match. Use centered radar with dynamic zoom off.");
-                            Toggle("Disable Rotation", &cfg::world::radar::no_rotate);
                         }
                         ImGui::EndDisabled();
                         EndSettingsCard(true);
@@ -1003,6 +1031,30 @@ void Menu::RenderImpl() {
                 else if (active_tab == Tab::SETTINGS)
                 {
 
+                    if (BeginSettingsCard("Setup mode")) {
+                        ImGui::TextWrapped("Simple keeps feature switches in your hands while automatically tuning visual density, line scale, tracer presentation and resolution scaling.");
+                        ImGui::Spacing();
+                        const float mode_width = (ImGui::GetContentRegionAvail().x - 8.f) * .5f;
+                        const bool simple_pressed = cfg::settings::advanced_controls
+                            ? ImGui::Button("Simple", ImVec2(mode_width, 30))
+                            : PrimaryButton("Simple", ImVec2(mode_width, 30));
+                        ImGui::SameLine(0.f, 8.f);
+                        const bool advanced_pressed = cfg::settings::advanced_controls
+                            ? PrimaryButton("Advanced", ImVec2(mode_width, 30))
+                            : ImGui::Button("Advanced", ImVec2(mode_width, 30));
+                        if (simple_pressed) {
+                            cfg::settings::advanced_controls = false;
+                            AutoCalibration::ApplySimple(screen.x, screen.y);
+                        }
+                        if (advanced_pressed) cfg::settings::advanced_controls = true;
+                        ImGui::Spacing();
+                        ImGui::TextDisabled(cfg::settings::advanced_controls
+                            ? "Granular appearance and calibration controls are visible."
+                            : "Automatic setup is active and updates with the game viewport.");
+                        ImGui::TextWrapped("Exact minimap range cannot be derived from map collision bounds. Simple keeps your saved range; Advanced exposes manual correction.");
+                        EndSettingsCard(true);
+                    }
+
                     if (BeginSettingsCard("Profiles")) {
                         static std::vector<std::string> profiles;
                         static int sel = -1;
@@ -1116,6 +1168,11 @@ void Menu::RenderImpl() {
                     }
 
                     if (BeginSettingsCard("Visual quality")) {
+                        if (!AutoCalibration::Advanced()) {
+                            ImGui::TextColored(kSignalOK, "AUTO  balanced for this viewport");
+                            ImGui::TextWrapped("Switch to Advanced mode to choose a fixed visual-quality preset.");
+                            EndSettingsCard(true);
+                        } else {
                         static int selected_preset = 1;
                         static const char* preset_names[] = {"Conservative", "Balanced", "Detail"};
                         ImGui::TextWrapped("Tune visual density and line quality together. Presets change presentation only; they never enable features or automation.");
@@ -1143,6 +1200,7 @@ void Menu::RenderImpl() {
                             ImGui::EndPopup();
                         }
                         EndSettingsCard(true);
+                        }
                     }
 
                     if (BeginSettingsCard("Diagnostics")) {

@@ -100,6 +100,16 @@ Vec3_t Direction(const Vec3_t& angles) {
     return {std::cos(pitch)*std::cos(yaw),std::cos(pitch)*std::sin(yaw),-std::sin(pitch)};
 }
 
+float CollisionReach(const Vec3_t& origin) {
+    const auto bounds=MapRaytrace::WorldBounds();
+    if(!Finite(origin)) return 0;
+    const float dx=std::max(std::abs(origin.x-bounds.min.x),std::abs(origin.x-bounds.max.x));
+    const float dy=std::max(std::abs(origin.y-bounds.min.y),std::abs(origin.y-bounds.max.y));
+    const float dz=std::max(std::abs(origin.z-bounds.min.z),std::abs(origin.z-bounds.max.z));
+    const float reach=std::hypot(dx,dy,dz)+1024.f;
+    return std::isfinite(reach)?std::clamp(reach,1024.f,1000000.f):0.f;
+}
+
 // Finite homogeneous clipping: a visible segment survives even when its
 // muzzle is outside the viewport or behind the near plane.
 bool Project(const Vec3_t& a,const Vec3_t& b,const view_matrix_t& matrix,const ImVec2& size,ImVec2& sa,ImVec2& sb) {
@@ -125,24 +135,29 @@ bool Project(const Vec3_t& a,const Vec3_t& b,const view_matrix_t& matrix,const I
 }
 }
 
-BulletTrails::Hit BulletTrails::Trace(const Vec3_t& origin,const Vec3_t& direction,float distance,
-                                     std::span<const Player> players,int shooter) {
-    Hit result{origin};
+static BulletTrails::Hit TraceLimited(const Vec3_t& origin,const Vec3_t& direction,float distance,
+                                      std::span<const Player> players,int shooter) {
+    BulletTrails::Hit result{origin};
     const float length=direction.length();
     if(!Finite(origin)||!Finite(direction)||!std::isfinite(length)||!std::isfinite(distance)||distance<=0||length<1e-6f) return result;
     const auto dir=direction/length;
-    float nearest=std::min(distance,16384.f);
+    float nearest=std::min(distance,1000000.f);
     const auto target=origin+dir*nearest;
     const auto world=MapRaytrace::TraceSegment({origin.x,origin.y,origin.z},{target.x,target.y,target.z});
     result.map_ready=world.ready;
-    if(world.hit) {nearest=world.distance;result.kind=HitKind::World;}
+    if(world.hit) {nearest=world.distance;result.kind=BulletTrails::HitKind::World;}
     for(const auto& player:players) {
         if(!player.alive||player.index==shooter||!Finite(player.pos)) continue;
         const float hit=PlayerHit(player,origin,dir,nearest);
-        if(hit<nearest) {nearest=hit;result.kind=HitKind::Player;result.player=player.index;}
+        if(hit<nearest) {nearest=hit;result.kind=BulletTrails::HitKind::Player;result.player=player.index;}
     }
     result.end=origin+dir*nearest;
     return result;
+}
+
+BulletTrails::Hit BulletTrails::Trace(const Vec3_t& origin,const Vec3_t& direction,
+                                      std::span<const Player> players,int shooter) {
+    return TraceLimited(origin,direction,CollisionReach(origin),players,shooter);
 }
 
 void BulletTrails::System::Clear() {previous.clear();shots.clear();current_map.clear();last_time=0;}
@@ -182,13 +197,13 @@ void BulletTrails::System::Update(std::span<const Player> players,const Player& 
         // Clamp the cosmetic muzzle to the first obstruction from the eye,
         // so a long muzzle offset cannot place a tracer beyond a nearby wall.
         const auto reach=desired_muzzle-eye;
-        const auto muzzle=Trace(eye,reach,reach.length(),players,player.index);
+        const auto muzzle=TraceLimited(eye,reach,reach.length(),players,player.index);
         Hit hit;
         Vec3_t origin=eye;
         if(muzzle.kind!=HitKind::None) hit=muzzle;
         else {
             origin=desired_muzzle;
-            hit=Trace(origin,dir,std::clamp(settings::length,50.f,16384.f),players,player.index);
+            hit=Trace(origin,dir,players,player.index);
         }
         if(!hit.map_ready || MapRaytrace::CurrentMap()!=current_map) {
             Clear();return; // Geometry changed while the shot was being evaluated.

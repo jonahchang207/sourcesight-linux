@@ -29,31 +29,36 @@ static void TestBulletTrails(const std::filesystem::path& dir) {
     joint(hip_L,-7,28);joint(knee_L,-7,14);joint(foot_heel_L,-7,2);
     joint(hip_R,7,28);joint(knee_R,7,14);joint(foot_heel_R,7,2);
     std::array<Player,1> targets{target};
-    auto hit=Trace({0,0,44},{1,0,0},500,targets,1);
+    auto hit=Trace({0,0,44},{1,0,0},targets,1);
     require(hit.map_ready&&hit.kind==HitKind::World&&std::abs(hit.end.x-25)<.001f,"wall shields player behind it");
     load("bullet-far",{wall(100)});
-    hit=Trace({0,0,44},{1,0,0},500,targets,1);
+    hit=Trace({0,0,44},{1,0,0},targets,1);
     require(hit.kind==HitKind::Player&&hit.player==2&&hit.end.x>50&&hit.end.x<60,"bone capsule stops shot before wall");
-    hit=Trace({0,0,44},{1,0,0},500,targets,2);
+    hit=Trace({0,0,44},{1,0,0},targets,2);
     require(hit.kind==HitKind::World,"shooter excluded from player collision");
-    hit=Trace({0,0,10},{1,0,0},500,targets,1);
+    hit=Trace({0,0,10},{1,0,0},targets,1);
     require(hit.kind==HitKind::World,"ray through leg gap does not hit a standing hull");
-    hit=Trace({60,0,44},{1,0,0},500,targets,1);
+    hit=Trace({60,0,44},{1,0,0},targets,1);
     require(hit.kind==HitKind::Player&&hit.end.x==60,"ray starting inside player stops immediately");
-    hit=Trace({0,0,65},{1,0,0},500,targets,1);
+    hit=Trace({0,0,65},{1,0,0},targets,1);
     require(hit.kind==HitKind::Player&&std::abs(hit.end.x-55.5f)<.01f,"head sphere collision");
-    hit=Trace({0,0,44},{1,0,0},15,targets,1);
-    require(hit.kind==HitKind::None&&hit.end.x==15,"range endpoint is not an impact");
     targets[0].bone_list.clear();
-    hit=Trace({0,0,44},{1,0,0},500,targets,1);
+    hit=Trace({0,0,44},{1,0,0},targets,1);
     require(hit.kind==HitKind::Player&&hit.end.x==44,"missing bones use conservative player hull");
     targets[0]=target;
     for(auto& bone:targets[0].bone_list) bone.pos.z*=.5f;
-    hit=Trace({0,0,65},{1,0,0},500,targets,1);
+    hit=Trace({0,0,65},{1,0,0},targets,1);
     require(hit.kind==HitKind::World,"crouching pose does not retain standing head collision");
 
+    std::array<Player,0> no_players{};
+    load("bullet-distant",{wall(20000)});
+    hit=Trace({0,0,44},{1,0,0},no_players,1);
+    require(hit.kind==HitKind::World&&std::abs(hit.end.x-20000)<.01f,
+            "automatic collision reach does not stop at the legacy distance cutoff");
+    load("bullet-far",{wall(100)});
+
     namespace settings=cfg::esp::bullet_tracer;
-    settings::enabled=true;settings::length=8192;settings::duration=1.25f;settings::muzzle_offset=20;
+    settings::enabled=true;settings::duration=1.25f;settings::muzzle_offset=20;
     Player shooter;
     shooter.index=1;shooter.localplayer=true;shooter.alive=true;shooter.pos={0,0,0};
     shooter.team=1;shooter.weapon.item_index=7;shooter.ammo=30;shooter.pawn_controller_addr=123;
@@ -116,7 +121,7 @@ static void TestBulletTrails(const std::filesystem::path& dir) {
     settings::duration=1.25f;
     MapRaytrace::Unload();players[0].ammo--;update();
     require(system.Shots().empty(),"missing map data suppresses collision-unknown trails");
-    hit=Trace({0,0,44},{1,0,0},500,targets,1);
+    hit=Trace({0,0,44},{1,0,0},targets,1);
     require(!hit.map_ready,"missing map is not presented as a clear world ray");
     settings::style=1;settings::glow=.27f;settings::impact=false;
     require(Config::SaveProfile("tracer-style-test"),"save tracer style settings");
